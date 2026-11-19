@@ -80,7 +80,7 @@ const num = n => n.toLocaleString('pt-BR');
 const pct = (a, b) => (b ? `${((a / b) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '–');
 const brl = n => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-function pagina(campanhas, dias) {
+function pagina(campanhas, dias, faltando = []) {
   const linhasTabela = campanhas.map(([nome, x]) => `
     <tr><th scope="row">${esc(nome)}</th><td>${num(x.enviados)}</td><td>${num(x.aberturas)} <small>${pct(x.aberturas, x.enviados)}</small></td>
     <td>${num(x.cliques)} <small>${pct(x.cliques, x.enviados)}</small></td><td>${num(x.sessoes)}</td>
@@ -101,9 +101,11 @@ function pagina(campanhas, dias) {
   th[scope=row], thead th:first-child { text-align: left; } thead th { color: #6B6B70; font-weight: normal; }
   small { color: #6B6B70; } h2 { font-size: 1.1rem; margin: 28px 0 8px; } h3 { font-size: .95rem; margin: 16px 0 4px; }
   ul { margin: 0; padding-left: 20px; } p.nota { color: #6B6B70; font-size: .8rem; }
+  p.aviso { background: #FDECEA; color: #5E1512; padding: 10px 14px; border-radius: 12px; }
 </style></head><body>
 <header><h1>Insights das campanhas de e-mail</h1></header>
 <main>
+  ${faltando.length ? `<p class="aviso">Aba não encontrada na planilha: <b>${faltando.map(esc).join(', ')}</b>. Esses números aparecem como zero.</p>` : ''}
   <nav>${PERIODOS.map(d => `<a href="?dias=${d}"${d === dias ? ' aria-current="page"' : ''}>${d} dias</a>`).join('')}</nav>
   <div class="tabela"><table>
     <thead><tr><th>Campanha</th><th>Enviados</th><th>Aberturas</th><th>Cliques</th><th>Sessões</th><th>add_to_cart</th><th>begin_checkout</th><th>purchase</th><th>Receita</th></tr></thead>
@@ -129,19 +131,26 @@ module.exports = async (req, res) => {
       dateRanges: [{ startDate: `${dias - 1}daysAgo`, endDate: 'today' }], limit: 1000, ...body,
     });
     const email = { filter: { fieldName: 'sessionMedium', stringFilter: { value: 'email' } } };
-    const abas = ['Enviados', 'Aberturas', 'Cliques'].map(a => `ranges=${encodeURIComponent(`${a}!A:Z`)}`).join('&');
+    // Acha as abas ignorando maiúsculas e espaços; aba que não existir conta como vazia.
+    const planilhaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${env.SHEET_ID}`;
+    const titulos = (await googleJson(`${planilhaUrl}?fields=sheets.properties.title`, token)).sheets.map(s => s.properties.title);
+    const achar = nome => titulos.find(t => t.trim().toLowerCase() === nome.toLowerCase());
+    const abas = ['Enviados', 'Aberturas', 'Cliques'].map(nome => ({ nome, titulo: achar(nome) }));
+    const faltando = abas.filter(a => !a.titulo).map(a => a.nome);
+    const ranges = abas.filter(a => a.titulo).map(a => `ranges=${encodeURIComponent(`'${a.titulo}'!A:Z`)}`).join('&');
     const [planilha, eventos, sessoes] = await Promise.all([
-      googleJson(`https://sheets.googleapis.com/v4/spreadsheets/${env.SHEET_ID}/values:batchGet?${abas}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, token),
+      ranges ? googleJson(`${planilhaUrl}/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, token) : { valueRanges: [] },
       ga({
         dimensions: [{ name: 'sessionCampaignName' }, { name: 'eventName' }], metrics: [{ name: 'eventCount' }],
         dimensionFilter: { andGroup: { expressions: [email, { filter: { fieldName: 'eventName', inListFilter: { values: EVENTOS } } }] } },
       }),
       ga({ dimensions: [{ name: 'sessionCampaignName' }], metrics: [{ name: 'sessions' }, { name: 'purchaseRevenue' }], dimensionFilter: email }),
     ]);
-    const [enviados, aberturas, cliques] = planilha.valueRanges.map(v => linhas(v.values, desde));
+    const lidas = [...planilha.valueRanges];
+    const [enviados, aberturas, cliques] = abas.map(a => (a.titulo ? linhas(lidas.shift().values, desde) : []));
     const campanhas = montar({ enviados, aberturas, cliques, eventos: eventos.rows || [], sessoes: sessoes.rows || [] });
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.status(200).send(pagina(campanhas, dias));
+    res.status(200).send(pagina(campanhas, dias, faltando));
   } catch (e) {
     res.status(500).send(`Erro ao montar o painel: ${esc(e.message)}`);
   }

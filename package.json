@@ -1,0 +1,13 @@
+{
+  "name": "pedeforno",
+  "private": true,
+  "dependencies": {
+    "nodemailer": "^10.6.0",
+    "pg": "^8.23.1"
+  },
+  "scripts": {
+    "dev": "node --watch scripts/dev.js",
+    "dev:zerar": "node scripts/dev.js --zerar",
+    "test": "node teste-hub.js"
+  }
+}

@@ -1,0 +1,1092 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Pede Forno · Gestão</title>
+<link rel="icon" href="/logo-app.png">
+<link rel="apple-touch-icon" href="/logo-app.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/animacoes.css">
+<style>
+  /* Layout copiado do painel do Beacons: menu à esquerda, conteúdo no meio, prévia do celular à direita. */
+  :root { color-scheme: light; --borda: #E6E6E6; --mudo: #8A8A8A; --texto: #1C1C1C; --ativo: #E9E9E9; --verde: #5EE29A; --preto: #1C1C1C; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 Poppins, "Segoe UI", Arial, sans-serif; color: var(--texto); background: #fff; }
+  button, input, select { font: inherit; color: var(--texto); }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid #2563EB; outline-offset: 2px; }
+  svg { flex-shrink: 0; }
+
+  .app { display: grid; grid-template-columns: 290px minmax(0, 1fr) 520px; min-height: 100vh; }
+  @media (max-width: 1280px) { .app { grid-template-columns: 250px minmax(0, 1fr) 420px; } }
+  @media (max-width: 1000px) { .app { grid-template-columns: 1fr; } .lado { display: none; } .menu { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--borda); } }
+
+  /* Menu */
+  .menu { position: sticky; top: 0; height: 100vh; overflow: auto; border-right: 1px solid var(--borda); padding: 18px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .marca { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.25rem; padding: 0 6px 18px; }
+  .marca img { width: 36px; height: 36px; border-radius: 50%; display: block; }
+  .item { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: none; text-align: left; padding: 9px 10px; border-radius: 8px; font-size: 1rem; }
+  .item:hover { background: #F4F4F4; }
+  .sub { padding-left: 40px; font-size: .95rem; }
+  .sub[aria-current=page], .item[aria-current=page] { background: var(--ativo); font-weight: 500; }
+  .item[disabled] { color: var(--mudo); cursor: default; background: none; }
+  .item small { margin-left: auto; font-size: .7rem; background: #F1F1F1; border-radius: 99px; padding: 1px 8px; }
+  .sep { border-top: 1px solid var(--borda); margin: 12px -14px; }
+
+  /* Centro */
+  .centro { padding: 0 40px 80px; min-width: 0; }
+  /* Barra de salvar (fica no topo enquanto rola) */
+  .barra { position: sticky; top: 0; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 -40px 24px; padding: 14px 40px; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--borda); }
+  .barra #status { flex: 1; min-width: 0; font-size: .9rem; color: var(--mudo); }
+  .barra button { white-space: nowrap; }
+  .barra #status.sujo { color: #B45309; font-weight: 500; }
+  .barra #status.erro { color: #B42318; background: #FDECEA; border-radius: 8px; padding: 6px 10px; }
+  .barra button { height: 40px; border-radius: 8px; padding: 0 16px; font-weight: 500; }
+  .barra button:disabled { opacity: .45; cursor: default; }
+  .barra .principal { border: 0; background: var(--preto); color: #fff; font-weight: 600; }
+  /* Ver prévia em tamanho grande */
+  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
+  .modal-caixa { background: #fff; border-radius: 16px; padding: 16px 20px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; max-height: 100%; }
+  .modal-topo { display: flex; gap: 16px; align-items: center; justify-content: space-between; width: 100%; }
+  .modal .celular { height: min(844px, calc(100vh - 120px)); }
+  /* Histórico */
+  .hist { border: 1px solid var(--borda); border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; }
+  .hist header { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .hist time { color: var(--mudo); font-size: .85rem; }
+  .hist ul { margin: 8px 0 0; padding-left: 20px; }
+  h1 { font-size: 1.6rem; font-weight: 600; margin: 8px 0 22px; }
+  h2 { font-size: 1.3rem; font-weight: 600; margin: 34px 0 14px; }
+  .adicionar { position: relative; }
+  .preto { width: 100%; height: 50px; border: 0; border-radius: 8px; background: var(--preto); color: #fff; font-weight: 600; font-size: 1rem; }
+  .escolha { position: absolute; z-index: 5; left: 0; right: 0; top: 56px; background: #fff; border: 1px solid var(--borda); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 8px; }
+  .escolha button { display: flex; gap: 14px; align-items: center; width: 100%; border: 0; background: none; text-align: left; padding: 10px; border-radius: 8px; }
+  .escolha button:hover { background: #F4F4F4; }
+  .escolha small { display: block; color: var(--mudo); }
+
+  .blocos { display: grid; gap: 14px; margin-top: 14px; }
+  .bloco { display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 0 18px 0 12px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; cursor: pointer; }
+  .bloco:hover { border-color: #CFCFCF; }
+  .bloco.alvo { border-color: var(--preto); border-style: dashed; }
+  .bloco.arrastando { opacity: .4; }
+  .bloco.oculto .nome, .bloco.oculto .chip { opacity: .45; }
+  .alca { color: #9A9A9A; cursor: grab; width: 20px; display: grid; place-items: center; }
+  .chip { width: 30px; height: 30px; border-radius: 8px; background: var(--verde); display: grid; place-items: center; color: #0F3D22; }
+  .chip.preto { background: var(--preto); color: #fff; }
+  .nome { flex: 1; min-width: 0; font-size: 1.15rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icone-btn { width: 36px; height: 36px; border: 0; background: none; border-radius: 8px; display: grid; place-items: center; }
+  .icone-btn:hover { background: #F1F1F1; }
+  .pontos { position: relative; }
+  .pontos-menu { position: absolute; right: 0; top: 40px; z-index: 6; min-width: 190px; background: #fff; border: 1px solid var(--borda); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.12); padding: 6px; }
+  .pontos-menu button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 6px; }
+  .pontos-menu button:hover { background: #F4F4F4; }
+  .perigo { color: #C62828 !important; }
+
+  /* Editor de bloco */
+  .voltar { border: 0; background: none; color: var(--mudo); padding: 0; display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+  .painel { border: 1px solid var(--borda); border-radius: 12px; padding: 22px; }
+  .titulo-bloco { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .titulo-bloco input { flex: 1; min-width: 0; border: 0; border-bottom: 1px solid transparent; font-size: 1.25rem; font-weight: 500; padding: 4px 2px; }
+  .titulo-bloco input:hover, .titulo-bloco input:focus { border-bottom-color: var(--borda); outline: none; }
+  .abas { display: inline-flex; gap: 4px; margin-bottom: 18px; }
+  .abas button { border: 0; background: none; padding: 7px 12px; border-radius: 8px; font-weight: 500; color: var(--mudo); }
+  .abas button[aria-selected=true] { background: #F1F1F1; color: var(--texto); }
+  .link { border: 1px solid var(--borda); border-radius: 10px; padding: 14px 14px 10px; margin-bottom: 12px; display: grid; grid-template-columns: 20px 1fr auto; gap: 0 10px; align-items: start; background: #fff; }
+  /* Cartão de link no formato do Beacons: textos à esquerda, miniatura à direita, rodapé com tipo, UTM, ••• e liga/desliga */
+  .link-b { border: 1px solid var(--borda); border-radius: 10px; padding: 16px 16px 10px 8px; margin: 14px 0; display: grid; grid-template-columns: 24px 1fr 84px; gap: 4px 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .link-b.alvo { border-color: var(--preto); border-style: dashed; }
+  .link-b.oculto .textos { opacity: .45; }
+  .link-b .alca { align-self: center; }
+  .textos { display: grid; gap: 2px; min-width: 0; }
+  .textos input { border: 0; border-radius: 6px; padding: 5px 6px; width: 100%; background: none; }
+  .textos input:hover, .textos input:focus { background: #F6F6F6; outline: none; }
+  .textos .forte { font-weight: 600; font-size: 1rem; }
+  .textos .suave { color: var(--mudo); font-size: .9rem; }
+  .textos .url { font-size: .9rem; }
+  .rodape-link { grid-column: 2 / -1; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid #F1F1F1; padding-top: 8px; margin-top: 6px; }
+  .rodape-link .esq, .rodape-link .dir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .rodape-link select { height: 32px; border: 1px solid var(--borda); border-radius: 8px; padding: 0 8px; background: #fff; font-size: .85rem; }
+  .rodape-link .chave { margin: 0; font-size: .85rem; font-weight: 400; }
+  /* Ferramentas do link (rodapé): animar, agendar, etiqueta, cores */
+  .ferr { width: 32px; height: 32px; color: #3A3A3A; }
+  .ferr.ligada { color: #fff; background: var(--preto); }
+  .painel-ferr { left: 0; right: auto; top: 38px; width: 330px; padding: 14px; display: grid; gap: 10px; cursor: default; }
+  .painel-ferr > b { font-size: .95rem; }
+  .painel-ferr .ajuda { margin: -6px 0 0; }
+  .grade-anim { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .painel-ferr .grade-anim button { display: grid; gap: 6px; place-items: center; width: 100%; height: 72px; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 4px; text-align: center; overflow: hidden; }
+  .painel-ferr .grade-anim button[aria-pressed=true] { border: 2px solid var(--preto); }
+  .barra-anim { display: block; width: 70%; height: 16px; border-radius: 99px; background: #BDBDBD; }
+  [aria-pressed=true] > .barra-anim { background: var(--preto); }
+  .barra-anim.nenhuma { background: linear-gradient(to top right, transparent 47%, #E5A0A0 48%, #E5A0A0 52%, transparent 53%); border-radius: 4px; height: 30px; }
+  .painel-ferr small { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--mudo); }
+  .campo-mini { display: grid; gap: 4px; font-size: .8rem; color: var(--mudo); }
+  .campo-mini input[type=datetime-local], .campo-mini input[type=text] { height: 38px; border: 1px solid var(--borda); border-radius: 8px; padding: 0 10px; }
+  .campo-mini.cor { display: flex; align-items: center; justify-content: space-between; padding: 0; }
+  .campo-mini.cor input { width: 40px; height: 40px; }
+  .linha-botoes { display: flex; gap: 6px; flex-wrap: wrap; }
+  .painel-ferr .linha-botoes button { display: inline-block; width: auto; border: 1px solid var(--borda); border-radius: 99px; padding: 4px 12px; font-size: .8rem; }
+  .icone-escolha.quadrado { width: 84px; height: 84px; border-radius: 10px; border: 0; background: #F1F1F1; }
+  .a-direita .pontos-menu { left: auto; right: 0; top: 90px; }
+  /* Abas Layout e Configurações */
+  .opcoes { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .opcoes button { border: 1px solid var(--borda); background: #fff; border-radius: 10px; display: grid; place-items: center; color: #9E9E9E; }
+  .opcoes button[aria-pressed=true] { border: 2px solid var(--preto); color: var(--preto); }
+  .opcoes button:disabled { opacity: .55; cursor: not-allowed; }
+  .opcoes .grande { width: 120px; height: 96px; }
+  .opcoes .pequeno { width: 46px; height: 46px; font-weight: 600; }
+  .opcoes figure { margin: 0; text-align: center; }
+  .opcoes figcaption { font-size: .85rem; margin-top: 6px; color: var(--mudo); }
+  .opcoes button[aria-pressed=true] + figcaption { color: var(--texto); }
+  .link.alvo { border-color: var(--preto); border-style: dashed; }
+  .link.oculto .campos { opacity: .5; }
+  .link .alca { padding-top: 10px; }
+  .link .acoes-link { display: flex; }
+  .campos { display: grid; gap: 8px; }
+  .duas { display: grid; grid-template-columns: 44px 170px 1fr; gap: 8px; align-items: center; }
+  @media (max-width: 1200px) { .duas { grid-template-columns: 44px 1fr; } .duas > :last-child { grid-column: 1 / -1; } }
+  .icone-escolha { width: 44px; height: 44px; border: 1px dashed #BDBDBD; border-radius: 50%; background: #fff; display: grid; place-items: center; color: #581512; padding: 0; overflow: hidden; font-size: 1.3rem; }
+  .icone-escolha img { width: 100%; height: 100%; object-fit: cover; }
+  .grade-icones { left: 0; right: auto; display: grid; grid-template-columns: repeat(5, 42px); gap: 6px; padding: 10px; }
+  .grade-icones > button { width: 42px; height: 42px; display: grid; place-items: center; padding: 0; border-radius: 8px; color: #581512; }
+  .grade-acoes { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 4px; }
+  .grade-acoes button { flex: 1; font-size: .8rem; padding: 7px 6px; border: 1px solid var(--borda) !important; text-align: center !important; }
+  .linha-img { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .miniatura { width: 72px; height: 72px; border-radius: 10px; object-fit: cover; background: #581512; border: 1px solid var(--borda); }
+  .duas-redes { display: grid; grid-template-columns: 36px 1fr; gap: 8px; align-items: center; }
+  .icone-rede { display: grid; place-items: center; color: #581512; }
+  .campo input, .campo select, .campos input, .campos select { width: 100%; height: 44px; border: 1px solid var(--borda); border-radius: 8px; padding: 0 12px; background: #fff; }
+  .campo { margin-bottom: 14px; }
+  .campo label, .rot { display: block; font-size: .85rem; color: var(--mudo); margin-bottom: 4px; }
+  .ajuda { font-size: .8rem; color: var(--mudo); margin: 4px 0 0; }
+  .chave { display: flex; align-items: center; gap: 10px; font-size: .9rem; font-weight: 500; margin: 6px 0; cursor: pointer; }
+  .chave input { appearance: none; width: 36px; height: 20px; border-radius: 99px; background: #D4D4D4; position: relative; margin: 0; cursor: pointer; transition: background .15s; flex-shrink: 0; }
+  .chave input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .chave input:checked { background: var(--preto); }
+  .chave input:checked::after { transform: translateX(16px); }
+  .secundario { border: 1px solid var(--borda); background: #fff; border-radius: 8px; padding: 9px 14px; font-weight: 500; }
+
+  /* Design */
+  .cartao { border: 1px solid var(--borda); border-radius: 12px; padding: 20px 22px; }
+  .perfil { display: flex; gap: 16px; align-items: center; margin-bottom: 18px; }
+  .perfil img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: #581512; }
+  .grupo-cor { font-weight: 600; margin: 18px 0 4px; }
+  .grupo-cor:first-child { margin-top: 0; }
+  .cor { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; color: #6B6B6B; }
+  .cor input { appearance: none; width: 58px; height: 58px; border-radius: 50%; border: 1px solid var(--borda); padding: 0; background: none; cursor: pointer; overflow: hidden; }
+  .cor input::-webkit-color-swatch-wrapper { padding: 0; }
+  .cor input::-webkit-color-swatch { border: 0; border-radius: 50%; }
+  .cor input::-moz-color-swatch { border: 0; border-radius: 50%; }
+  .estilos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .estilos button { width: 100%; border: 1px solid var(--borda); background: #fff; border-radius: 8px; height: 120px; display: grid; place-items: center; }
+  .estilos button[aria-pressed=true] { border: 2px solid var(--preto); }
+  .estilos span { display: block; width: 60%; height: 26px; background: #BDBDBD; }
+  .estilos button[aria-pressed=true] span { background: var(--preto); }
+  .estilos p { text-align: center; margin: 6px 0 0; color: var(--mudo); }
+  .estilos p.sel { color: var(--texto); }
+
+  /* Resultados e Histórico usam a largura toda (sem o celular ao lado) */
+  .app.sem-previa { grid-template-columns: 290px minmax(0, 1fr); } /* também Usuários e Minha conta */
+  .app.sem-previa .lado { display: none; }
+  @media (max-width: 1280px) { .app.sem-previa { grid-template-columns: 250px minmax(0, 1fr); } }
+  @media (max-width: 1000px) { .app.sem-previa { grid-template-columns: 1fr; } }
+  /* Resultados — cores das séries da paleta validada (azul = visitas, laranja = cliques) */
+  .res { --s1: #2a78d6; --s2: #eb6834; --grade: #e1e0d9; --eixo: #898781; --tinta2: #52514e; }
+  .cab-res { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 8px 0 18px; }
+  .cab-res h1 { margin: 0; }
+  .filtros { display: inline-flex; gap: 4px; background: #F1F1F1; border-radius: 10px; padding: 4px; }
+  .filtros button { border: 0; background: none; border-radius: 8px; padding: 6px 12px; font-weight: 500; color: var(--mudo); }
+  .filtros button[aria-pressed=true] { background: #fff; color: var(--texto); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile { border: 1px solid var(--borda); border-radius: 12px; padding: 14px 16px; display: grid; gap: 2px; align-content: start; }
+  .tile strong { font-size: 1.75rem; font-weight: 600; line-height: 1.2; }
+  .var { font-size: .8rem; color: var(--mudo); }
+  .var.sobe { color: #006300; }
+  .var.desce { color: #d03b3b; }
+  .res-sec { border: 1px solid var(--borda); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .res-sec h2 { margin: 0 0 4px; font-size: 1.1rem; }
+  .res-sec > .ajuda { margin: 0 0 12px; }
+  .legenda { display: flex; gap: 18px; font-size: .85rem; color: var(--tinta2); margin: 8px 0 4px; }
+  .legenda i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .grafico { position: relative; }
+  .grafico svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
+  .dica { position: absolute; top: 4px; pointer-events: none; background: #fff; border: 1px solid var(--borda); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.1); padding: 8px 10px; font-size: .8rem; white-space: nowrap; transform: translateX(-50%); }
+  .dica b { display: block; margin-bottom: 2px; }
+  .dica i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .funil { display: grid; gap: 10px; }
+  .passo { display: grid; grid-template-columns: 210px 1fr 150px; gap: 12px; align-items: center; font-size: .9rem; }
+  .passo .trilho-barra { background: #F4F4F4; border-radius: 4px; }
+  .passo .barra { height: 24px; border-radius: 0 4px 4px 0; min-width: 2px; }
+  .passo .valor { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .passo small { display: block; color: var(--mudo); font-size: .75rem; font-weight: 400; }
+  @media (max-width: 760px) { .passo { grid-template-columns: 1fr; gap: 4px; } }
+  .tabela { overflow-x: auto; }
+  .tabela table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .tabela th, .tabela td { padding: 8px 10px; border-bottom: 1px solid #EEEEEE; text-align: left; white-space: nowrap; }
+  .tabela thead th { color: var(--mudo); font-weight: 500; font-size: .8rem; }
+  .tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tabela tbody th { font-weight: 500; }
+  .duas-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .aviso-ga { background: #FFF8E6; border: 1px solid #F5DFA6; border-radius: 10px; padding: 10px 14px; font-size: .85rem; margin-bottom: 16px; }
+  details.numeros { margin-top: 10px; font-size: .85rem; }
+  details.numeros summary { cursor: pointer; color: var(--mudo); }
+
+  /* Quem está logado (rodapé do menu) */
+  .eu { margin-top: auto; border-top: 1px solid var(--borda); padding: 14px 6px 0; display: grid; gap: 2px; }
+  .eu b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .eu span { color: var(--mudo); font-size: .8rem; }
+  .eu .acoes-eu { display: flex; gap: 6px; margin-top: 8px; }
+  .eu .acoes-eu button { flex: 1; font-size: .85rem; padding: 6px 8px; }
+  /* Usuários */
+  .usuario { border: 1px solid var(--borda); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; display: grid; gap: 10px; }
+  .usuario.inativo { background: #FAFAFA; }
+  .usuario .topo-u { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .usuario .topo-u input { flex: 1; min-width: 160px; height: 38px; border: 1px solid transparent; border-radius: 8px; padding: 0 8px; font-weight: 600; }
+  .usuario .topo-u input:hover, .usuario .topo-u input:focus { border-color: var(--borda); outline: none; }
+  .usuario .mail { color: var(--mudo); font-size: .88rem; word-break: break-all; }
+  .selo { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 10px; border-radius: 99px; background: #E8F5EC; color: #14532D; }
+  .selo.pendente { background: #FFF3D6; color: #7A4B00; }
+  .selo.off { background: #EEE; color: #555; }
+  .linha-u { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .linha-u select { height: 36px; border: 1px solid var(--borda); border-radius: 8px; padding: 0 8px; background: #fff; }
+  .linha-u .secundario { padding: 6px 12px; font-size: .85rem; }
+  .form-u { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .form-u .largo { grid-column: 1 / -1; }
+  @media (max-width: 700px) { .form-u { grid-template-columns: 1fr; } }
+  .campo select { width: 100%; height: 44px; border: 1px solid var(--borda); border-radius: 8px; padding: 0 12px; background: #fff; }
+  .msg { font-size: .88rem; margin: 10px 0 14px; }
+  .msg.erro { color: #B42318; background: #FDECEA; border-radius: 8px; padding: 8px 12px; }
+  .msg.ok { color: #14532D; background: #E8F5EC; border-radius: 8px; padding: 8px 12px; }
+
+  /* Lado direito: endereço + celular */
+  .lado { position: sticky; top: 0; height: 100vh; padding: 40px 12px; display: flex; flex-direction: column; align-items: center; }
+  .rotulo { font-size: .75rem; font-weight: 600; letter-spacing: .06em; color: var(--mudo); align-self: stretch; max-width: 420px; margin: 0 auto 6px; width: 100%; }
+  .dominio { display: flex; gap: 8px; width: 100%; max-width: 420px; }
+  .dominio .url { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 42px; border: 1px solid var(--borda); border-radius: 8px; padding: 0 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .dominio .icone-btn { border: 1px solid var(--borda); width: 42px; height: 42px; }
+  .lado .rotulo-previa { margin: 16px 0 8px; font-size: .8rem; color: var(--mudo); }
+  /* 375 px por dentro = largura de um celular comum, para a prévia quebrar as linhas igual ao aparelho */
+  .celular { width: 395px; height: min(832px, calc(100vh - 190px)); flex-shrink: 0; border: 10px solid var(--preto); border-radius: 40px; overflow: hidden; background: #581512; }
+  .celular iframe { width: 100%; height: 100%; border: 0; display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="menu" aria-label="Menu">
+    <div class="marca"><img src="/logo-app.png" alt="" width="36" height="36">Pede Forno</div>
+    <button class="item" type="button" id="m-grupo"><span data-i="menuGrade"></span>Link na bio</button>
+    <button class="item sub" type="button" data-vista="blocos">Blocos</button>
+    <button class="item sub" type="button" data-vista="design">Design</button>
+    <div class="sep"></div>
+    <button class="item" type="button" data-vista="resultados"><span data-i="grafico"></span>Resultados</button>
+    <button class="item" type="button" data-vista="historico"><span data-i="relogio"></span>Histórico</button>
+    <button class="item" type="button" data-vista="usuarios" id="m-usuarios" hidden><span data-i="pessoas"></span>Usuários</button>
+    <div class="eu" id="eu">
+      <b id="eu-nome"></b><span id="eu-papel"></span>
+      <div class="acoes-eu"><button type="button" class="secundario" id="minha-conta" hidden>Minha conta</button><button type="button" class="secundario" id="sair">Sair</button></div>
+    </div>
+  </nav>
+
+  <section class="centro">
+    <div class="barra">
+      <span id="status" role="status">Tudo salvo</span>
+      <button type="button" class="secundario" id="ver">Ver prévia</button>
+      <button type="button" class="secundario" id="descartar" disabled>Descartar</button>
+      <button type="button" class="principal" id="salvar" disabled>Salvar alterações</button>
+    </div>
+    <div id="centro"></div>
+  </section>
+
+  <aside class="lado">
+    <div class="rotulo">ENDEREÇO DA PÁGINA</div>
+    <div class="dominio">
+      <span class="url"><span data-i="corrente"></span><span id="dominio"></span></span>
+      <button class="icone-btn" type="button" id="copiar" title="Copiar endereço" aria-label="Copiar endereço"><span data-i="copiar"></span></button>
+      <a class="icone-btn" id="abrir" target="_blank" rel="noopener" title="Abrir a página" aria-label="Abrir a página"><span data-i="abrir"></span></a>
+    </div>
+    <div class="rotulo-previa">Prévia com as alterações (antes de salvar)</div>
+    <div class="celular"><iframe class="previa" title="Prévia da página" src="/?previa=1"></iframe></div>
+  </aside>
+</div>
+<script src="/icones.js"></script>
+<script>
+  // Ícones da interface do admin (traço simples, estilo do Beacons)
+  const ICON = {
+    menuGrade: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 17h6M17 14v6"/>',
+    grafico: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    corrente: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    copiar: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+    abrir: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    alca: '<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>',
+    pontos: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    olho: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    olhoFechado: '<path d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+    lixo: '<path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/>',
+    voltar: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+    loja: '<path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M9 20v-6h6v6"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14M15 10h3M15 14h3"/>',
+    pessoa: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    pessoas: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M21.5 20a6 6 0 0 0-4-5.6"/>',
+    estrela: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+    calendario: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3v3H8z"/>',
+    etiqueta: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+    paleta: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.5-.8 1.2-1.6-.4-1-.1-2.4 1.6-2.4H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/>',
+    classico: '<path d="M5 6h14M5 10h14M5 14h14M5 18h14" stroke-width="3"/>',
+    carrossel: '<rect x="3" y="9" width="5" height="6"/><rect x="9.5" y="9" width="5" height="6"/><rect x="16" y="9" width="5" height="6"/>',
+    grade: '<path d="M4 4h4v4H4zM10 4h4v4h-4zM16 4h4v4h-4zM4 10h4v4H4zM10 10h4v4h-4zM16 10h4v4h-4zM4 16h4v4H4zM10 16h4v4h-4zM16 16h4v4h-4z"/>',
+    cards: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+    esquerda: '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>',
+    centro: '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>',
+    direita: '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>',
+    aberto: '<path d="M5 5h14M5 9.5h14M5 14h14M5 18.5h14" stroke-width="2.5"/>',
+    recolhido: '<path d="M4 12h16" stroke-width="4"/><path d="M16 11l1.5 1.5L19 11"/>',
+  };
+  const svg = (n, t = 20) => `<svg width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
+  for (const s of document.querySelectorAll('[data-i]')) s.outerHTML = svg(s.dataset.i);
+
+  const $ = id => document.getElementById(id);
+  // Sessão vencida (ou usuário desativado): qualquer chamada que volte 401 leva para a tela de entrada.
+  const _fetch = window.fetch.bind(window);
+  window.fetch = async (...a) => { const r = await _fetch(...a); if (r.status === 401) location.reload(); return r; };
+  const el = (tag, props = {}, ...filhos) => { const e = Object.assign(document.createElement(tag), props); e.append(...filhos.flat(Infinity).filter(x => x != null && x !== false)); return e; };
+  const html = (tag, props, codigo) => { const e = el(tag, props); e.innerHTML = codigo; return e; }; // só com ícones fixos acima, nunca com dados
+  const PADRAO = { cor: '#581512', cor_topo: '#FFFFFF', cor_bloco: '#FFFFFF', cor_texto: '#581512', fonte: 'Actor', estilo: 'oval', sombra: '0', contorno: '0' };
+  const FONTES = ['Actor', 'Inter', 'Poppins', 'Montserrat', 'Nunito', 'Roboto', 'Lora', 'Playfair Display'];
+  const NOME_ACAO = { pedido: 'Faça Seu Pedido', whatsapp: 'WhatsApp', mapa: 'Localização', link: '' };
+  const PADRAO_OPCOES = { layout: 'classico', visibilidade: 'aberto', tamanho: 'p', alinhamento: 'centro', posicao_imagem: 'esquerda', tamanho_texto: 'g', contorno: false, sombra: false, miniatura: '' };
+  const VAZIO = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; // miniatura vazia (mostra só o fundo cinza)
+  const PRESETS = {
+    links: ['link', 'Bloco de links', 'Botões simples, um embaixo do outro.'],
+    unidade: ['loja', 'Unidade', 'Botão que abre com Pedido, WhatsApp e Localização.'],
+    card: ['card', 'Card', 'Imagem de um lado e texto do outro (ex.: Cardápio).'],
+    carrossel: ['carrossel', 'Carrossel de imagens', 'Fotos lado a lado que deslizam.'],
+  };
+
+  let estado, vista = 'blocos', editando = null, aba = 'links';
+
+  // ---------- Salvar (manual) e prévia do rascunho ----------
+  let salvando = false, sujo = false, versao = 0, timerPrevia;
+  const aviso = (t, tipo = '') => { $('status').textContent = t; $('status').className = tipo === true ? 'erro' : tipo; };
+  const barra = () => { $('salvar').disabled = $('descartar').disabled = !sujo || salvando; };
+  function marcar() {
+    sujo = true; versao++;
+    if (!salvando) aviso('Alterações não salvas', 'sujo');
+    barra();
+    clearTimeout(timerPrevia); timerPrevia = setTimeout(enviarPrevia, 150);
+  }
+  // A prévia mostra o rascunho como o público veria: só o que está visível.
+  function dadosPrevia() {
+    const visivel = l => l.ativo !== false;
+    return { config: { ...estado.config, redes: JSON.stringify(estado.config.redes) }, links: estado.links.filter(visivel).map(l => ({ ...l, filhos: l.filhos.filter(visivel) })) };
+  }
+  function enviarPrevia() {
+    if (!estado) return;
+    for (const f of document.querySelectorAll('iframe.previa')) f.contentWindow?.postMessage({ tipo: 'previa', dados: dadosPrevia() }, location.origin);
+  }
+  async function api(corpo) {
+    const r = await fetch('/api/admin' + (corpo ? '' : '?dados=1'), corpo
+      ? { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'admin' }, body: JSON.stringify(corpo) }
+      : {});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erro || `Erro ${r.status}`);
+    return d;
+  }
+  async function salvar() {
+    if (salvando || !sujo) return;
+    salvando = true; barra();
+    aviso('Salvando…');
+    const salvandoVersao = versao;
+    // Guarda quem foi enviado para devolver os ids novos aos mesmos objetos, mesmo que a tela mude enquanto salva.
+    const enviados = estado.links.map(l => [l, [...l.filhos]]);
+    try {
+      const r = await api({ config: estado.config, links: estado.links });
+      enviados.forEach(([l, filhos], i) => { l.id = r.links[i].id; filhos.forEach((f, j) => { f.id = r.links[i].filhos[j].id; }); });
+      sujo = versao !== salvandoVersao; // mudou algo enquanto salvava? continua pendente
+      aviso(sujo ? 'Alterações não salvas' : `Salvo às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · no ar em até 1 min`, sujo ? 'sujo' : '');
+    } catch (e) { aviso(e.message, true); }
+    salvando = false; barra();
+  }
+  async function descartar() {
+    if (!confirm('Descartar todas as alterações que ainda não foram salvas?')) return;
+    try { await carregar(); aviso('Alterações descartadas.'); } catch (e) { aviso(e.message, true); }
+  }
+  $('salvar').onclick = salvar;
+  $('descartar').onclick = descartar;
+  addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); salvar(); } }); // Ctrl+S
+  for (const f of document.querySelectorAll('iframe.previa')) f.onload = enviarPrevia;
+  $('ver').onclick = () => {
+    const f = el('iframe', { className: 'previa', title: 'Prévia em tamanho grande', src: '/?previa=1' });
+    f.onload = enviarPrevia;
+    const m = el('div', { className: 'modal', role: 'dialog', ariaModal: 'true', ariaLabel: 'Prévia', onclick: e => { if (e.target === m) m.remove(); } },
+      el('div', { className: 'modal-caixa' },
+        el('div', { className: 'modal-topo' }, el('b', { textContent: sujo ? 'Prévia com alterações ainda não salvas' : 'Prévia' }),
+          el('button', { type: 'button', className: 'secundario', textContent: 'Fechar', onclick: () => m.remove() })),
+        el('div', { className: 'celular' }, f)));
+    document.body.append(m);
+    m.querySelector('button').focus();
+  };
+  addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelector('.modal')?.remove(); });
+  addEventListener('beforeunload', e => { if (salvando || sujo) e.preventDefault(); });
+
+  // ---------- Peças ----------
+  function campo(rotulo, obj, chave, { tipo = 'text', dica = '', ajuda = '' } = {}) {
+    const i = el('input', { type: tipo, value: obj[chave] ?? '', placeholder: dica });
+    i.addEventListener('input', () => { obj[chave] = i.value; marcar(); });
+    return el('div', { className: 'campo' }, el('label', {}, rotulo, i), ajuda && el('p', { className: 'ajuda', textContent: ajuda }));
+  }
+  function chave(rotulo, obj, k, sim = true, nao = false) {
+    const i = el('input', { type: 'checkbox', checked: obj[k] === sim });
+    i.addEventListener('change', () => { obj[k] = i.checked ? sim : nao; marcar(); });
+    return el('label', { className: 'chave' }, i, rotulo);
+  }
+  function olho(obj, aoMudar) {
+    const b = el('button', { type: 'button', className: 'icone-btn' });
+    const pintar = () => { b.innerHTML = svg(obj.ativo ? 'olho' : 'olhoFechado'); b.title = obj.ativo ? 'Visível na página (clique para esconder)' : 'Escondido (clique para mostrar)'; b.ariaLabel = b.title; b.ariaPressed = String(!obj.ativo); };
+    pintar();
+    b.onclick = e => { e.stopPropagation(); obj.ativo = !obj.ativo; pintar(); aoMudar?.(); marcar(); };
+    return b;
+  }
+  function pontos(opcoes) {
+    const caixa = el('div', { className: 'pontos' });
+    const b = html('button', { type: 'button', className: 'icone-btn', title: 'Mais opções', ariaLabel: 'Mais opções', ariaExpanded: 'false' }, svg('pontos'));
+    b.onclick = e => {
+      e.stopPropagation();
+      const aberto = caixa.querySelector('.pontos-menu');
+      fecharMenus();
+      if (aberto) return;
+      b.ariaExpanded = 'true';
+      caixa.append(el('div', { className: 'pontos-menu', role: 'menu' }, opcoes.map(([t, f, cls]) => el('button', { type: 'button', role: 'menuitem', textContent: t, className: cls || '', onclick: ev => { ev.stopPropagation(); fecharMenus(); f(); } }))));
+    };
+    caixa.append(b);
+    return caixa;
+  }
+  const fecharMenus = () => { document.querySelectorAll('.pontos-menu, .escolha').forEach(m => m.remove()); document.querySelectorAll('[aria-expanded=true]').forEach(b => { b.ariaExpanded = 'false'; }); };
+  addEventListener('click', fecharMenus);
+
+  // ---------- Imagens: reduz no navegador e envia para o banco ----------
+  // Imagem sem perda: se o arquivo já é JPG/PNG/WebP de tamanho razoável, vai exatamente como está.
+  // Só arquivos grandes demais são reduzidos (lado maior = max) e regravados em qualidade alta.
+  async function enviarImagem(arquivo, max) {
+    aviso('Enviando imagem…');
+    const bmp = await createImageBitmap(arquivo);
+    let blob = arquivo;
+    const pronto = ['image/jpeg', 'image/png', 'image/webp'].includes(arquivo.type) && arquivo.size <= 2.5e6 && Math.max(bmp.width, bmp.height) <= max;
+    if (!pronto) {
+      const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const tela = Object.assign(document.createElement('canvas'), { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+      const ctx = tela.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(bmp, 0, 0, tela.width, tela.height);
+      blob = await new Promise(r => tela.toBlob(r, 'image/webp', 0.92)); // WebP mantém o fundo transparente
+      if (blob.size > 2.9e6) blob = await new Promise(r => tela.toBlob(r, 'image/webp', 0.8));
+    }
+    const dados = await new Promise(r => { const f = new FileReader(); f.onload = () => r(String(f.result).split(',')[1]); f.readAsDataURL(blob); });
+    const r = await fetch('/api/imagem', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'admin' }, body: JSON.stringify({ tipo: blob.type, dados }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erro || 'Não foi possível enviar a imagem.');
+    return d.url;
+  }
+  function escolherArquivo(max, pronto) {
+    const i = el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp' });
+    i.onchange = async () => {
+      if (!i.files[0]) return;
+      try { pronto(await enviarImagem(i.files[0], max)); }
+      catch (e) { aviso(e instanceof DOMException ? 'Não foi possível abrir essa imagem. Use JPG, PNG ou WebP.' : e.message, true); }
+    };
+    i.click();
+  }
+  const ehImagem = v => !!v && v !== 'nenhum' && !v.startsWith('i:');
+  function campoImagem(rotulo, obj, k, { max = 1600, padrao = '', mostra = '', ajuda = '' } = {}) {
+    const img = el('img', { className: 'miniatura', alt: '', src: ehImagem(obj[k]) ? obj[k] : (mostra || padrao) });
+    const usar = v => { obj[k] = v; img.src = ehImagem(v) ? v : (mostra || padrao); marcar(); };
+    return el('div', { className: 'campo' }, el('span', { className: 'rot', textContent: rotulo }),
+      el('div', { className: 'linha-img' }, img,
+        el('button', { type: 'button', className: 'secundario', textContent: 'Trocar imagem', onclick: () => escolherArquivo(max, usar) }),
+        el('button', { type: 'button', className: 'secundario', textContent: 'Voltar ao padrão', onclick: () => usar(padrao) })),
+      ajuda && el('p', { className: 'ajuda', textContent: ajuda }));
+  }
+
+  // Ícone dentro do botão: biblioteca, imagem própria ou nenhum. Sem escolha, vale o padrão da ação.
+  function seletorIcone(obj, quadrado = false, max = 256) {
+    const caixa = el('div', { className: 'pontos' + (quadrado ? ' a-direita' : '') });
+    const atual = () => obj.icone || (ICONES[obj.acao] ? 'i:' + obj.acao : '');
+    const b = el('button', { type: 'button', className: 'icone-escolha' + (quadrado ? ' quadrado' : ''), title: 'Trocar ícone', ariaLabel: 'Trocar ícone', ariaExpanded: 'false' });
+    const tam = quadrado ? 44 : 24;
+    const pintar = () => {
+      const v = atual();
+      b.replaceChildren();
+      if (ehImagem(v)) b.append(el('img', { src: v, alt: '' }));
+      else if (v.startsWith('i:')) b.innerHTML = iconeSvg(v.slice(2), tam, 1.4);
+      else b.textContent = '+';
+    };
+    const usar = v => { obj.icone = v; pintar(); fecharMenus(); marcar(); };
+    pintar();
+    b.onclick = e => {
+      e.stopPropagation();
+      const aberto = caixa.querySelector('.pontos-menu');
+      fecharMenus();
+      if (aberto) return;
+      b.ariaExpanded = 'true';
+      caixa.append(el('div', { className: 'pontos-menu grade-icones', role: 'menu', onclick: ev => ev.stopPropagation() },
+        Object.entries(ICONES).map(([k, [nome]]) => { const o = el('button', { type: 'button', role: 'menuitem', title: nome, ariaLabel: nome, onclick: () => usar('i:' + k) }); o.innerHTML = iconeSvg(k, 22, 1.6); return o; }),
+        el('div', { className: 'grade-acoes' },
+          el('button', { type: 'button', textContent: 'Enviar imagem', onclick: () => { fecharMenus(); escolherArquivo(max, usar); } }),
+          el('button', { type: 'button', textContent: 'Sem ícone', onclick: () => usar('nenhum') }))));
+    };
+    caixa.append(b);
+    return caixa;
+  }
+  addEventListener('keydown', e => { if (e.key === 'Escape') fecharMenus(); });
+
+  // ---------- Ferramentas do link (rodapé do cartão, como no Beacons) ----------
+  function ferramenta(icone, rotulo, ligado, montar) {
+    const caixa = el('div', { className: 'pontos' });
+    const b = html('button', { type: 'button', className: 'icone-btn ferr', title: rotulo, ariaLabel: rotulo, ariaExpanded: 'false' }, svg(icone, 18));
+    const pintar = () => { b.classList.toggle('ligada', !!ligado()); b.ariaPressed = String(!!ligado()); };
+    const mudou = () => { pintar(); marcar(); };
+    pintar();
+    b.onclick = e => {
+      e.stopPropagation();
+      const aberto = caixa.querySelector('.pontos-menu');
+      fecharMenus();
+      if (aberto) return;
+      b.ariaExpanded = 'true';
+      caixa.append(el('div', { className: 'pontos-menu painel-ferr', role: 'dialog', ariaLabel: rotulo, onclick: ev => ev.stopPropagation() }, el('b', { textContent: rotulo }), montar(mudou)));
+    };
+    caixa.append(b);
+    return caixa;
+  }
+  const ANIMACOES = [['', 'Nenhuma'], ['bounce', 'Pular'], ['jello', 'Gelatina'], ['wobble', 'Balançar'], ['pulse', 'Pulsar'], ['shake', 'Tremer'], ['tada', 'Tcharam']];
+  const paraCampo = iso => (iso ? new Date(Date.parse(iso) - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16) : ''); // ISO (UTC) -> campo local
+  function ferramentasLink(f) {
+    const o = f.opcoes;
+    return [
+      ferramenta('estrela', 'Animar este link', () => o.animacao, mudou => [
+        el('p', { className: 'ajuda', textContent: 'Uma animação para dar destaque ao link.' }),
+        el('div', { className: 'grade-anim' }, ANIMACOES.map(([v, nome]) => el('button', { type: 'button', ariaPressed: String((o.animacao || '') === v), onclick: () => { o.animacao = v; mudou(); fecharMenus(); } },
+          el('span', { className: v ? `barra-anim anim-${v}` : 'barra-anim nenhuma' }), el('small', { textContent: nome }))))]),
+      ferramenta('calendario', 'Agendar este link', () => o.inicio || o.fim, mudou => {
+        const data = (rotulo, k) => {
+          const i = el('input', { type: 'datetime-local', value: paraCampo(o[k]) });
+          i.addEventListener('change', () => { o[k] = i.value ? new Date(i.value).toISOString() : ''; mudou(); });
+          return el('label', { className: 'campo-mini' }, rotulo, i);
+        };
+        return [el('p', { className: 'ajuda', textContent: 'Fora deste período o link some da página sozinho. Deixe em branco para não limitar.' }),
+          data('Mostrar a partir de', 'inicio'), data('Esconder depois de', 'fim'),
+          el('div', { className: 'linha-botoes' }, el('button', { type: 'button', textContent: 'Tirar agendamento', onclick: () => { o.inicio = o.fim = ''; mudou(); fecharMenus(); } }))];
+      }),
+      ferramenta('etiqueta', 'Etiqueta no botão', () => o.etiqueta, mudou => {
+        const i = el('input', { type: 'text', value: o.etiqueta || '', maxLength: 20, placeholder: 'Ex.: NOVO' });
+        i.addEventListener('input', () => { o.etiqueta = i.value; mudou(); });
+        const usar = t => () => { o.etiqueta = t; i.value = t; mudou(); };
+        return [el('p', { className: 'ajuda', textContent: 'Um selo pequeno no canto do botão.' }), el('label', { className: 'campo-mini' }, 'Texto da etiqueta', i),
+          el('div', { className: 'linha-botoes' }, ['NOVO', 'PROMO', 'HOJE', 'MAIS PEDIDO'].map(t => el('button', { type: 'button', textContent: t, onclick: usar(t) })),
+            el('button', { type: 'button', textContent: 'Tirar etiqueta', onclick: () => { usar('')(); fecharMenus(); } }))];
+      }),
+      ferramenta('paleta', 'Cores deste botão', () => o.cor_bloco || o.cor_texto, mudou => {
+        const cor = (rotulo, k, padrao) => {
+          const i = el('input', { type: 'color', value: o[k] || padrao, ariaLabel: rotulo });
+          i.addEventListener('input', () => { o[k] = i.value.toUpperCase(); mudou(); });
+          return el('label', { className: 'campo-mini cor' }, rotulo, i);
+        };
+        return [el('p', { className: 'ajuda', textContent: 'Só para este botão; os outros seguem as cores do Design.' }),
+          cor('Fundo do botão', 'cor_bloco', estado.config.cor_bloco || '#FFFFFF'), cor('Texto do botão', 'cor_texto', estado.config.cor_texto || '#581512'),
+          el('div', { className: 'linha-botoes' }, el('button', { type: 'button', textContent: 'Usar as cores da página', onclick: () => { o.cor_bloco = o.cor_texto = ''; mudou(); fecharMenus(); } }))];
+      }),
+    ];
+  }
+
+  // Arrastar para reordenar (dentro da mesma lista)
+  let arrasto = null;
+  function arrastavel(no, lista, i) {
+    no.draggable = true;
+    no.addEventListener('dragstart', e => { arrasto = { lista, i }; no.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); });
+    no.addEventListener('dragend', () => { no.classList.remove('arrastando'); arrasto = null; });
+    no.addEventListener('dragover', e => { if (arrasto?.lista === lista) { e.preventDefault(); e.stopPropagation(); no.classList.add('alvo'); } });
+    no.addEventListener('dragleave', () => no.classList.remove('alvo'));
+    no.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation(); no.classList.remove('alvo');
+      if (arrasto?.lista !== lista || arrasto.i === i) return;
+      const [x] = lista.splice(arrasto.i, 1); lista.splice(i, 0, x);
+      marcar(); desenhar();
+    });
+  }
+  const mover = (lista, i, d) => { const j = i + d; if (j < 0 || j >= lista.length) return; [lista[i], lista[j]] = [lista[j], lista[i]]; marcar(); desenhar(); };
+  const remover = (lista, i) => { if (confirm(`Remover "${lista[i].titulo || 'este item'}" da página?`)) { lista.splice(i, 1); marcar(); desenhar(); } };
+
+  // ---------- Vista: Blocos ----------
+  function vistaBlocos() {
+    const add = el('div', { className: 'adicionar' });
+    const botao = el('button', { type: 'button', className: 'preto', textContent: '+ Adicionar bloco', ariaExpanded: 'false' });
+    botao.onclick = e => {
+      e.stopPropagation();
+      if (add.querySelector('.escolha')) return fecharMenus();
+      fecharMenus(); botao.ariaExpanded = 'true';
+      add.append(el('div', { className: 'escolha', role: 'menu' }, Object.entries(PRESETS).map(([tipo, [icone, nome, desc]]) => {
+        const b = el('button', { type: 'button', role: 'menuitem', onclick: () => novoBloco(tipo) });
+        b.append(html('span', { className: 'chip' }, svg(icone, 18)), el('span', {}, el('b', { textContent: nome }), el('small', { textContent: desc })));
+        return b;
+      })));
+    };
+    add.append(botao);
+
+    const cabecalho = el('div', { className: 'bloco', onclick: () => ir('design') });
+    cabecalho.append(el('span', { className: 'alca' }), html('span', { className: 'chip preto' }, svg('pessoa', 18)), el('span', { className: 'nome', textContent: 'Cabeçalho' }), el('span', { className: 'ajuda', textContent: 'foto, logo e ícones sociais' }));
+
+    const linhas = estado.links.map((l, i) => {
+      const b = el('div', { className: 'bloco' + (l.ativo ? '' : ' oculto'), onclick: () => editar(l) });
+      b.append(html('span', { className: 'alca', title: 'Arraste para mudar a ordem' }, svg('alca')), html('span', { className: 'chip' }, svg('link', 18)),
+        el('span', { className: 'nome', textContent: l.nome || l.titulo || 'Bloco sem nome' }),
+        pontos([['Editar', () => editar(l)], ['Mover para cima', () => mover(estado.links, i, -1)], ['Mover para baixo', () => mover(estado.links, i, 1)], ['Remover', () => remover(estado.links, i), 'perigo']]),
+        olho(l, () => b.classList.toggle('oculto', !l.ativo)));
+      arrastavel(b, estado.links, i);
+      return b;
+    });
+    return [el('h1', { textContent: 'Link na bio' }), add, el('div', { className: 'blocos' }, cabecalho, linhas)];
+  }
+
+  function novoBloco(tipo) {
+    const o = { ...PADRAO_OPCOES };
+    const link = (acao, titulo) => ({ tipo: 'acao', acao, titulo, subtitulo: '', url: '', utm: acao === 'pedido', icone: '', ativo: true, opcoes: {} });
+    let filhos = [link('link', '')];
+    if (tipo === 'unidade') { o.visibilidade = 'recolhido'; filhos = ['pedido', 'whatsapp', 'mapa'].map(a => link(a, NOME_ACAO[a])); }
+    if (tipo === 'card') o.layout = 'card';
+    if (tipo === 'carrossel') { o.layout = 'carrossel'; filhos = [link('link', ''), link('link', '')]; }
+    const b = { tipo: 'bloco', nome: PRESETS[tipo][1], titulo: tipo === 'unidade' ? 'Unidade ' : '', subtitulo: '', loja: '', ativo: true, opcoes: o, filhos };
+    estado.links.push(b);
+    marcar();
+    editar(b);
+  }
+
+  // ---------- Vista: editor de um bloco ----------
+  function vistaEditor(l) {
+    const lista = estado.links;
+    const o = l.opcoes;
+    const nome = el('input', { value: l.nome || '', placeholder: 'Nome do bloco', title: 'Nome do bloco (só aparece aqui no admin)', ariaLabel: 'Nome do bloco' });
+    nome.addEventListener('input', () => { l.nome = nome.value; marcar(); });
+    const topo = el('div', { className: 'titulo-bloco' }, html('span', { className: 'chip' }, svg('link', 18)), nome, olho(l),
+      html('button', { type: 'button', className: 'icone-btn perigo', title: 'Remover bloco', ariaLabel: 'Remover bloco', onclick: () => { const i = lista.indexOf(l); if (i >= 0 && confirm(`Remover o bloco "${l.nome || l.titulo || 'sem nome'}" da página?`)) { lista.splice(i, 1); marcar(); ir('blocos'); } } }, svg('lixo')));
+    const voltar = html('button', { type: 'button', className: 'voltar', onclick: () => ir('blocos') }, svg('voltar', 18) + ' Voltar');
+    const abas = el('div', { className: 'abas', role: 'tablist' }, [['links', 'Links'], ['layout', 'Layout'], ['config', 'Configurações']].map(([k, t]) =>
+      el('button', { type: 'button', role: 'tab', textContent: t, ariaSelected: String(aba === k), onclick: () => { aba = k; desenhar(); } })));
+    // Botões de escolha com desenho (layout, tamanho, alinhamento, aberto/recolhido)
+    const escolhas = (rotulo, k, itens, classe = 'grande') => el('div', {}, el('span', { className: 'rot', textContent: rotulo }),
+      el('div', { className: 'opcoes' }, itens.map(([v, nomeOp, desenho, desligado]) => {
+        const b = el('button', { type: 'button', className: classe, ariaPressed: String(o[k] === v), disabled: !!desligado, title: desligado ? 'Em breve' : nomeOp, ariaLabel: nomeOp,
+          onclick: () => { o[k] = v; marcar(); desenhar(); } });
+        if (desenho) b.innerHTML = svg(desenho, classe === 'grande' ? 40 : 22); else b.textContent = nomeOp;
+        return classe === 'grande' ? el('figure', {}, b, el('figcaption', { textContent: nomeOp })) : b;
+      })));
+    const lista_ = (rotulo, k, itens) => {
+      const sel = el('select', { ariaLabel: rotulo }, itens.map(([v, t]) => el('option', { value: v, textContent: t, selected: o[k] === v })));
+      sel.addEventListener('change', () => { o[k] = sel.value; marcar(); });
+      return el('div', { className: 'campo' }, el('label', {}, rotulo, sel));
+    };
+    const ALINHAMENTO = [['esquerda', 'À esquerda', 'esquerda'], ['centro', 'Centralizado', 'centro'], ['direita', 'À direita', 'direita']];
+
+    let corpo;
+    if (aba === 'links') {
+      const carrossel = o.layout === 'carrossel';
+      const cartoes = l.filhos.map((f, j) => {
+        const entrada = (k, classe, dica, tipo = 'text') => {
+          const i = el('input', { type: tipo, className: classe, value: f[k] || '', placeholder: dica, ariaLabel: dica });
+          i.addEventListener('input', () => { f[k] = i.value; marcar(); });
+          return i;
+        };
+        const tipo = el('select', { ariaLabel: 'Tipo do link (usado nos resultados)' }, [['pedido', 'Pedido'], ['whatsapp', 'WhatsApp'], ['mapa', 'Localização'], ['link', 'Outro']].map(([v, t]) => el('option', { value: v, textContent: t, selected: f.acao === v })));
+        tipo.addEventListener('change', () => { if (!f.titulo || f.titulo === NOME_ACAO[f.acao]) f.titulo = NOME_ACAO[tipo.value]; f.acao = tipo.value; if (f.acao === 'pedido') f.utm = true; marcar(); desenhar(); });
+        const liga = el('input', { type: 'checkbox', checked: f.ativo, ariaLabel: 'Mostrar na página' });
+        const cartao = el('div', { className: 'link-b' + (f.ativo ? '' : ' oculto') });
+        liga.addEventListener('change', () => { f.ativo = liga.checked; cartao.classList.toggle('oculto', !f.ativo); marcar(); });
+        cartao.append(html('span', { className: 'alca', title: 'Arraste para mudar a ordem' }, svg('alca')),
+          el('div', { className: 'textos' },
+            entrada('titulo', 'forte', carrossel ? 'Descrição da imagem (opcional)' : 'Título'),
+            !carrossel && entrada('subtitulo', 'suave', 'Subtítulo (opcional)'),
+            entrada('url', 'url', carrossel ? 'Link ao tocar na foto (opcional)' : 'https://', 'url')),
+          seletorIcone(f, true, o.layout === 'classico' ? 256 : 2000), // ícone pequeno ou foto (card/carrossel) em alta
+          el('div', { className: 'rodape-link' },
+            el('div', { className: 'esq' }, ferramentasLink(f), tipo, Object.assign(chave('UTM', f, 'utm'), { title: 'Leva a origem da visita (ex.: Instagram / bio) junto no link, para o Google Analytics do site de pedidos saber de onde o cliente veio e ligar a visita à compra. Use nos links do site de pedidos e do cardápio; não precisa em WhatsApp, mapa ou Instagram.' })),
+            el('div', { className: 'dir' },
+              pontos([['Mover para cima', () => mover(l.filhos, j, -1)], ['Mover para baixo', () => mover(l.filhos, j, 1)], ['Remover', () => remover(l.filhos, j), 'perigo']]),
+              el('label', { className: 'chave', title: 'Mostrar na página' }, liga))));
+        arrastavel(cartao, l.filhos, j);
+        return cartao;
+      });
+      corpo = [abas,
+        carrossel && el('p', { className: 'ajuda', textContent: 'No carrossel aparecem só as imagens. Clique no quadrado à direita de cada link para enviar a foto.' }),
+        o.layout === 'card' && el('p', { className: 'ajuda', textContent: 'A imagem do card é o quadrado à direita de cada link (é diferente da logo do topo).' }),
+        el('button', { type: 'button', className: 'preto', textContent: '+ Adicionar link', onclick: () => { l.filhos.unshift({ tipo: 'acao', acao: 'link', titulo: '', subtitulo: '', url: '', utm: false, icone: '', ativo: true, opcoes: {} }); marcar(); desenhar(); } }),
+        ...cartoes];
+    } else if (aba === 'layout') {
+      corpo = [abas,
+        escolhas('Layout', 'layout', [['classico', 'Clássico', 'classico'], ['carrossel', 'Carrossel', 'carrossel'], ['grade', 'Grade de imagens', 'grade', true], ['card', 'Card', 'cards']]),
+        ...(o.layout === 'card'
+          ? [lista_('Posição da imagem', 'posicao_imagem', [['esquerda', 'Esquerda'], ['direita', 'Direita']]),
+            escolhas('Alinhamento do texto', 'alinhamento', ALINHAMENTO, 'pequeno'),
+            escolhas('Tamanho do texto', 'tamanho_texto', [['p', 'P'], ['m', 'M'], ['g', 'G'], ['gg', 'GG']], 'pequeno')]
+          : o.layout === 'carrossel'
+            ? [escolhas('Tamanho das imagens', 'tamanho', [['p', 'P'], ['g', 'G']], 'pequeno')]
+            : [escolhas('Tamanho do link', 'tamanho', [['p', 'P'], ['g', 'G']], 'pequeno'),
+              escolhas('Alinhamento do texto', 'alinhamento', ALINHAMENTO, 'pequeno')]),
+        chave('Contorno do link', o, 'contorno'),
+        chave('Sombra do link', o, 'sombra')];
+    } else {
+      corpo = [abas,
+        el('p', { className: 'ajuda', textContent: 'Título e subtítulo são opcionais e ajudam o cliente a achar o que procura.' }),
+        campo('Título', l, 'titulo', { ajuda: 'No bloco recolhido, é o texto do botão.' }),
+        campo('Subtítulo', l, 'subtitulo', { ajuda: 'Aparece só com o bloco aberto.' }),
+        escolhas('Visibilidade do bloco', 'visibilidade', [['aberto', 'Aberto', 'aberto'], ['recolhido', 'Recolhido', 'recolhido']]),
+        o.visibilidade === 'recolhido' && campoImagem('Imagem do botão recolhido', o, 'miniatura', { max: 600, mostra: VAZIO, ajuda: 'Opcional. Quadrada, aparece à esquerda do título.' }),
+        campo('Código da loja (opcional)', l, 'loja', { dica: 'fornopaulistasul', ajuda: 'Para separar os resultados por unidade: o mesmo código do endereço no site de pedidos.' })];
+    }
+    return [voltar, el('div', { className: 'painel' }, topo, corpo)];
+  }
+
+  // ---------- Vista: Design ----------
+  function vistaDesign() {
+    const c = estado.config;
+    for (const [k, v] of Object.entries(PADRAO)) c[k] ||= v;
+    const cor = (rotulo, k) => {
+      const i = el('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(c[k]) ? c[k] : PADRAO[k], ariaLabel: rotulo });
+      i.addEventListener('input', () => { c[k] = i.value.toUpperCase(); marcar(); });
+      return el('label', { className: 'cor' }, rotulo, i);
+    };
+    const fonte = el('select', { ariaLabel: 'Fonte' }, FONTES.map(f => el('option', { value: f, textContent: f, selected: c.fonte === f })));
+    fonte.addEventListener('change', () => { c.fonte = fonte.value; marcar(); });
+    const estilos = el('div', { className: 'estilos' }, [['arredondado', 'Arredondado', '8px'], ['oval', 'Oval', '99px'], ['quadrado', 'Quadrado', '0'], ['largo', 'Largura total', '0']].map(([k, t, raio]) => {
+      const b = el('button', { type: 'button', ariaPressed: String(c.estilo === k), onclick: () => { c.estilo = k; marcar(); desenhar(); } }, el('span', { style: `border-radius:${raio};${k === 'largo' ? 'width:90%' : ''}` }));
+      return el('div', {}, b, el('p', { textContent: t, className: c.estilo === k ? 'sel' : '' }));
+    }));
+    const foto = el('img', { src: c.capa || 'capa.jpg', alt: '' });
+    return [
+      el('h1', { textContent: 'Design' }),
+      el('h2', { textContent: 'Perfil' }),
+      el('div', { className: 'cartao' },
+        el('div', { className: 'perfil' }, foto, el('div', {}, el('b', { textContent: 'Cabeçalho' }), el('p', { className: 'ajuda', textContent: 'Foto de capa, logo e Instagram que aparecem no topo.' }))),
+        campoImagem('Foto de fundo', c, 'capa', { max: 2000, padrao: 'capa.jpg', ajuda: 'Foto do topo (no computador ela também aparece desfocada no fundo).' }),
+        campoImagem('Logo', c, 'logo', { max: 1200, padrao: 'logo-branca.png', ajuda: 'Use PNG com fundo transparente.' }),
+        campo('Texto do rodapé', c, 'rodape'),
+        campo('Título da página (lido por leitores de tela)', c, 'titulo')),
+      el('h2', { textContent: 'Ícones sociais' }),
+      secaoRedes(),
+      el('h2', { textContent: 'Cores' }),
+      el('div', { className: 'cartao' },
+        el('div', { className: 'grupo-cor', textContent: 'Página' }), cor('Fundo', 'cor'), cor('Texto e ícones do cabeçalho', 'cor_topo'),
+        el('div', { className: 'grupo-cor', textContent: 'Blocos' }), cor('Fundo', 'cor_bloco'), cor('Texto', 'cor_texto')),
+      el('h2', { textContent: 'Fonte' }),
+      el('div', { className: 'cartao' }, el('div', { className: 'campo' }, el('label', {}, 'Fonte do texto', fonte))),
+      el('h2', { textContent: 'Estilo dos blocos' }),
+      el('div', { className: 'cartao' }, estilos, chave('Sombra no bloco', c, 'sombra', '1', '0'), chave('Contorno no bloco', c, 'contorno', '1', '0')),
+    ];
+  }
+
+  const DICA_REDE = { email: 'mailto:contato@seudominio.com', telefone: 'tel:+5586999999999', whatsapp: 'https://wa.me/5586999999999' };
+  function secaoRedes() {
+    const c = estado.config;
+    const linhas = c.redes.map((r, i) => {
+      const sel = el('select', { ariaLabel: 'Rede' }, REDES.map(k => el('option', { value: k, textContent: ICONES[k][0], selected: r.rede === k })));
+      sel.addEventListener('change', () => { r.rede = sel.value; marcar(); desenhar(); });
+      const url = el('input', { type: 'text', value: r.url, placeholder: DICA_REDE[r.rede] || 'https://', ariaLabel: 'Link' });
+      url.addEventListener('input', () => { r.url = url.value; marcar(); });
+      const linha = el('div', { className: 'link' + (r.ativo ? '' : ' oculto') });
+      linha.append(html('span', { className: 'alca', title: 'Arraste para mudar a ordem' }, svg('alca')),
+        el('div', { className: 'campos' }, el('div', { className: 'duas-redes' }, html('span', { className: 'icone-rede' }, iconeSvg(r.rede, 22, 1.6)), sel), url),
+        el('div', { className: 'acoes-link' }, olho(r, () => linha.classList.toggle('oculto', !r.ativo)),
+          html('button', { type: 'button', className: 'icone-btn perigo', title: 'Remover ícone', ariaLabel: 'Remover ícone', onclick: () => remover(c.redes, i) }, svg('lixo'))));
+      arrastavel(linha, c.redes, i);
+      return linha;
+    });
+    return el('div', { className: 'cartao' }, el('p', { className: 'ajuda', textContent: 'Aparecem logo abaixo da logo, no topo da página.' }), linhas,
+      el('button', { type: 'button', className: 'preto', textContent: '+ Adicionar ícone', onclick: () => { c.redes.push({ rede: 'instagram', url: '', ativo: true }); marcar(); desenhar(); } }));
+  }
+
+  // ---------- Vista: Resultados ----------
+  let periodo = 30;
+  const FUSO = 'America/Fortaleza';
+  const fmt = n => Number(n || 0).toLocaleString('pt-BR');
+  const brl = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const pct = (a, b) => (b ? `${((a / b) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '–');
+  const dataCurta = k => k.slice(8, 10) + '/' + k.slice(5, 7);
+  const APARELHO = { celular: 'Celular', computador: 'Computador', tablet: 'Tablet' };
+
+  function vistaResultados() {
+    const corpo = el('div', {}, el('p', { className: 'ajuda', textContent: 'Carregando…' }));
+    const filtros = el('div', { className: 'filtros', role: 'group', ariaLabel: 'Período' }, [7, 30, 90].map(d =>
+      el('button', { type: 'button', textContent: `${d} dias`, ariaPressed: String(periodo === d), onclick: () => { periodo = d; desenhar(); } })));
+    fetch(`/api/admin?resultados=1&dias=${periodo}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error())))
+      .then(d => corpo.replaceChildren(...painelResultados(d)))
+      .catch(() => corpo.replaceChildren(el('p', { className: 'ajuda', textContent: 'Não foi possível carregar os resultados agora.' })));
+    return [el('div', { className: 'res' }, el('div', { className: 'cab-res' }, el('h1', { textContent: 'Resultados' }), filtros), corpo)];
+  }
+
+  // Tabela simples: primeira coluna é o nome, as outras são números alinhados.
+  function tabela(cabecas, linhas, semDados) {
+    if (!linhas.length) return el('p', { className: 'ajuda', textContent: semDados });
+    return el('div', { className: 'tabela' }, el('table', {},
+      el('thead', {}, el('tr', {}, cabecas.map((c, i) => el('th', { textContent: c, className: i ? 'num' : '', scope: 'col' })))),
+      el('tbody', {}, linhas.map(l => el('tr', {}, l.map((v, i) => (i ? el('td', { textContent: v, className: 'num' }) : el('th', { textContent: v, scope: 'row' }))))))));
+  }
+  const secao = (titulo, ajuda, ...conteudo) => el('section', { className: 'res-sec' }, el('h2', { textContent: titulo }), ajuda && el('p', { className: 'ajuda', textContent: ajuda }), conteudo);
+
+  function painelResultados(d) {
+    const t = d.totais, a = d.anterior, g = d.ga.ok ? d.ga.total : null;
+    const variacao = (agora, antes) => {
+      if (!antes) return el('span', { className: 'var', textContent: agora ? 'sem dados no período anterior' : '' });
+      const p = ((agora - antes) / antes) * 100;
+      return el('span', { className: 'var ' + (p >= 0 ? 'sobe' : 'desce'), textContent: `${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% vs ${d.dias} dias anteriores` });
+    };
+    const tile = (rotulo, valor, extra, dica = '') => el('div', { className: 'tile', title: dica }, el('span', { className: 'rot', textContent: rotulo }), el('strong', { textContent: valor }), extra);
+    return [
+      !d.ga.ok && el('p', { className: 'aviso-ga', textContent: d.ga.motivo }),
+      el('div', { className: 'tiles' },
+        tile('Visitas', fmt(t.visitas), variacao(t.visitas, a.visitas), 'Cada abertura da página conta uma visita'),
+        tile('Cliques', fmt(t.cliques), variacao(t.cliques, a.cliques)),
+        tile('Taxa de clique', pct(t.cliques, t.visitas), el('span', { className: 'var', textContent: 'cliques ÷ visitas' })),
+        tile('Cliques em "Pedido"', fmt(t.pedidos), variacao(t.pedidos, a.pedidos)),
+        g && tile('Compras', fmt(g.compras), el('span', { className: 'var', textContent: 'de quem veio pela página' }), 'Google Analytics do site de pedidos'),
+        g && tile('Receita', brl(g.receita), el('span', { className: 'var', textContent: 'de quem veio pela página' }), 'Google Analytics do site de pedidos')),
+      secao('Visitas e cliques por dia', '', grafico(d)),
+      secao('Funil até a compra', g ? 'Os dois primeiros passos são da página; os outros vêm do Google Analytics, só para quem chegou pela página (mesma UTM).' : 'Os passos depois do clique em "Pedido" aparecem quando o Google Analytics estiver disponível.', funil(t, g)),
+      secao('Origens', 'De onde vieram as visitas (as UTMs do link). A mesma UTM segue até o site de pedidos.',
+        tabela(['Origem / meio / campanha', 'Visitas', 'Cliques', 'Taxa', 'Cliques em Pedido', ...(g ? ['Sessões na loja', 'Compras', 'Receita'] : [])],
+          d.origens.map(o => [[o.origem, o.meio, o.campanha].filter(Boolean).join(' / '), fmt(o.visitas), fmt(o.cliques), pct(o.cliques, o.visitas), fmt(o.pedidos),
+            ...(g ? [fmt(o.ga.sessoes), fmt(o.ga.compras), brl(o.ga.receita)] : [])]), 'Nenhuma visita no período.')),
+      el('div', { className: 'duas-col' },
+        secao('Links mais clicados', '',
+          tabela(['Link', 'Cliques', '% das visitas'], d.links.map(l => [!l.titulo ? (l.bloco || `Link ${l.link_id} (removido)`) : !l.bloco || l.bloco === l.titulo ? l.titulo : `${l.bloco} › ${l.titulo}`, fmt(l.cliques), pct(l.cliques, t.visitas)]), 'Nenhum clique no período.')),
+        secao('Aparelhos', '',
+          tabela(['Aparelho', 'Visitas', '%'], d.aparelhos.map(x => [APARELHO[x.dispositivo] || x.dispositivo, fmt(x.visitas), pct(x.visitas, t.visitas)]), 'Nenhuma visita no período.'),
+          d.sociais.length ? el('div', { style: 'margin-top:14px' }, tabela(['Ícone social', 'Cliques'], d.sociais.map(x => [ICONES[x.acao]?.[0] || x.acao, fmt(x.cliques)]), '')) : null)),
+      secao('Unidades', g ? 'Compras e receita por unidade vêm do Google Analytics e incluem todas as origens (não só a página).' : 'Aberturas do botão da unidade e cliques em cada link dela.',
+        tabela(['Unidade', 'Aberturas', 'Pedido', 'WhatsApp', 'Localização', ...(g ? ['Compras', 'Receita'] : [])],
+          d.lojas.map(l => [l.nome, fmt(l.aberturas), fmt(l.pedidos), fmt(l.whatsapp), fmt(l.mapa), ...(g ? [fmt(l.ga.compras), brl(l.ga.receita)] : [])]), 'Nenhum clique em unidades no período.')),
+      el('p', { className: 'ajuda', textContent: 'A página não usa cookies: cada abertura conta como uma visita (a mesma pessoa pode contar mais de uma vez). Abrir pela prévia do admin não conta.' }),
+    ];
+  }
+
+  // Gráfico de linhas: visitas (azul) e cliques (laranja), um só eixo, dica ao passar o mouse.
+  function grafico(d) {
+    const porDia = Object.fromEntries(d.diario.map(x => [x.dia, x]));
+    const dias = [];
+    for (let i = d.dias - 1; i >= 0; i--) {
+      const k = new Date(Date.now() - i * 864e5).toLocaleDateString('sv-SE', { timeZone: FUSO }); // AAAA-MM-DD no fuso de Teresina
+      dias.push({ dia: k, visitas: porDia[k]?.visitas || 0, cliques: porDia[k]?.cliques || 0 });
+    }
+    const W = 760, H = 250, m = { e: 44, d: 14, t: 14, b: 30 };
+    const maior = Math.max(1, ...dias.map(x => Math.max(x.visitas, x.cliques)));
+    // 4 divisões redondas (1, 2, 2,5 ou 5 × 10ⁿ) que cobrem o maior valor
+    const bruto = maior / 4;
+    const pot = 10 ** Math.floor(Math.log10(bruto));
+    const passo = [1, 2, 2.5, 5, 10].map(f => f * pot).find(v => v >= bruto && Number.isInteger(v)) || Math.ceil(bruto);
+    const topo = passo * 4;
+    const x = i => m.e + (i * (W - m.e - m.d)) / Math.max(1, dias.length - 1);
+    const y = v => H - m.b - (v / topo) * (H - m.t - m.b);
+    const linha = k => dias.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join('');
+    const grade = [0, 1, 2, 3, 4].map(n => {
+      const v = n * passo;
+      return `<line x1="${m.e}" x2="${W - m.d}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grade)" stroke-width="1"/><text x="${m.e - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--eixo)" style="font-variant-numeric:tabular-nums">${v.toLocaleString('pt-BR')}</text>`;
+    }).join('');
+    const marcas = [0, Math.floor((dias.length - 1) / 2), dias.length - 1].map(i => `<text x="${x(i)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === dias.length - 1 ? 'end' : 'middle'}" font-size="11" fill="var(--eixo)">${dataCurta(dias[i].dia)}</text>`).join('');
+    const caixa = el('div', { className: 'grafico' });
+    caixa.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Visitas e cliques por dia nos últimos ${d.dias} dias">${grade}${marcas}
+      <path d="${linha('visitas')}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${linha('cliques')}" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <g class="mira" visibility="hidden"><line y1="${m.t}" y2="${H - m.b}" stroke="var(--eixo)" stroke-width="1" stroke-dasharray="3 3"/>
+        <circle r="4.5" fill="var(--s1)" stroke="#fff" stroke-width="2"/><circle r="4.5" fill="var(--s2)" stroke="#fff" stroke-width="2"/></g>
+      <rect x="${m.e}" y="0" width="${W - m.e - m.d}" height="${H}" fill="transparent"/></svg>`;
+    const svgEl = caixa.querySelector('svg');
+    const mira = caixa.querySelector('.mira');
+    const [traco, p1, p2] = mira.children;
+    const dica = el('div', { className: 'dica', hidden: true });
+    caixa.append(dica);
+    const mostrar = e => {
+      const r = svgEl.getBoundingClientRect();
+      const px = ((e.clientX - r.left) * W) / r.width;
+      const i = Math.max(0, Math.min(dias.length - 1, Math.round(((px - m.e) / (W - m.e - m.d)) * (dias.length - 1))));
+      const p = dias[i];
+      traco.setAttribute('x1', x(i)); traco.setAttribute('x2', x(i));
+      p1.setAttribute('cx', x(i)); p1.setAttribute('cy', y(p.visitas));
+      p2.setAttribute('cx', x(i)); p2.setAttribute('cy', y(p.cliques));
+      mira.setAttribute('visibility', 'visible');
+      const data = new Date(`${p.dia}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+      dica.replaceChildren(el('b', { textContent: data }),
+        el('div', {}, el('i', { style: 'background:var(--s1)' }), `Visitas: ${fmt(p.visitas)}`),
+        el('div', {}, el('i', { style: 'background:var(--s2)' }), `Cliques: ${fmt(p.cliques)}`));
+      dica.hidden = false;
+      dica.style.left = `${Math.min(Math.max((x(i) / W) * r.width, 70), r.width - 70)}px`;
+    };
+    svgEl.addEventListener('pointermove', mostrar);
+    svgEl.addEventListener('pointerdown', mostrar);
+    svgEl.addEventListener('pointerleave', () => { mira.setAttribute('visibility', 'hidden'); dica.hidden = true; });
+    const legenda = el('div', { className: 'legenda' }, el('span', {}, el('i', { style: 'background:var(--s1)' }), 'Visitas'), el('span', {}, el('i', { style: 'background:var(--s2)' }), 'Cliques'));
+    const numeros = el('details', { className: 'numeros' }, el('summary', { textContent: 'Ver os números por dia' }),
+      tabela(['Dia', 'Visitas', 'Cliques'], dias.slice().reverse().map(p => [dataCurta(p.dia), fmt(p.visitas), fmt(p.cliques)]), ''));
+    return [legenda, caixa, numeros];
+  }
+
+  // Funil: barras do maior para o menor, com a % de quem seguiu do passo anterior.
+  function funil(t, g) {
+    const passos = [['Visitas na página', t.visitas], ['Cliques em "Pedido"', t.pedidos]];
+    if (g) passos.push(['Chegaram na loja', g.sessoes], ['Puseram no carrinho', g.carrinho], ['Foram pagar', g.checkout], ['Compraram', g.compras]);
+    const tons = ['#86b6ef', '#6da7ec', '#3987e5', '#2a78d6', '#256abf', '#184f95']; // rampa azul, um tom por passo
+    const topo = Math.max(1, ...passos.map(p => p[1]));
+    return el('div', { className: 'funil' }, passos.map(([nome, v], i) => el('div', { className: 'passo' },
+      el('span', { textContent: nome }),
+      el('div', { className: 'trilho-barra' }, el('div', { className: 'barra', style: `width:${(v / topo) * 100}%;background:${tons[i]}` })),
+      el('span', { className: 'valor' }, fmt(v), i ? el('small', { textContent: `${pct(v, passos[i - 1][1])} do passo anterior` }) : null))));
+  }
+
+  // ---------- Vista: Usuários (só administrador) e Minha conta ----------
+  const NIVEL = { admin: 'Administrador', editor: 'Editor' };
+  async function usuariosApi(corpo) {
+    const r = await fetch('/api/admin?usuarios=1', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'admin' }, body: JSON.stringify(corpo) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erro || `Erro ${r.status}`);
+    return d;
+  }
+  const mensagem = (caixa, texto, tipo) => { caixa.textContent = texto || ''; caixa.className = 'msg' + (texto ? ` ${tipo}` : ''); caixa.hidden = !texto; };
+
+  function vistaUsuarios() {
+    const msg = el('p', { className: 'msg', role: 'status', hidden: true });
+    const lista = el('div', {});
+    const chamar = async corpo => {
+      try {
+        const d = await usuariosApi(corpo);
+        if (d.usuarios) pintar(d.usuarios);
+        mensagem(msg, d.aviso, d.problema ? 'erro' : 'ok');
+        return d;
+      } catch (e) { mensagem(msg, e.message, 'erro'); }
+    };
+    const pintar = us => lista.replaceChildren(...us.map(u => {
+      const meu = u.id === estado.eu.id;
+      const nome = el('input', { value: u.nome, ariaLabel: `Nome de ${u.nome}`, maxLength: 80 });
+      nome.addEventListener('change', () => chamar({ op: 'editar', id: u.id, nome: nome.value, papel: u.papel, ativo: u.ativo }));
+      const nivel = el('select', { ariaLabel: `Nível de ${u.nome}`, disabled: meu, title: meu ? 'Você não pode mudar o seu próprio nível' : '' },
+        Object.entries(NIVEL).map(([v, t]) => el('option', { value: v, textContent: t, selected: u.papel === v })));
+      nivel.addEventListener('change', () => chamar({ op: 'editar', id: u.id, nome: u.nome, papel: nivel.value, ativo: u.ativo }).then(d => { if (!d) nivel.value = u.papel; }));
+      const selo = u.ativo ? (u.convite_pendente ? el('span', { className: 'selo pendente', textContent: 'Convite pendente' }) : el('span', { className: 'selo', textContent: 'Ativo' })) : el('span', { className: 'selo off', textContent: 'Desativado' });
+      const acesso = u.ultimo_acesso ? `Último acesso: ${new Date(u.ultimo_acesso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : 'Ainda não entrou';
+      return el('article', { className: 'usuario' + (u.ativo ? '' : ' inativo') },
+        el('div', { className: 'topo-u' }, nome, selo),
+        el('span', { className: 'mail', textContent: `${u.email} · ${acesso}${meu ? ' · você' : ''}` }),
+        el('div', { className: 'linha-u' }, nivel,
+          u.ativo && el('button', { type: 'button', className: 'secundario', textContent: u.convite_pendente ? 'Reenviar convite' : 'Enviar link de nova senha', onclick: () => chamar({ op: 'reenviar', id: u.id }) }),
+          !meu && el('button', { type: 'button', className: 'secundario', textContent: u.ativo ? 'Desativar' : 'Reativar', onclick: () => chamar({ op: 'editar', id: u.id, nome: u.nome, papel: u.papel, ativo: !u.ativo }) }),
+          !meu && el('button', { type: 'button', className: 'secundario perigo', textContent: 'Remover', onclick: () => { if (confirm(`Remover ${u.nome} (${u.email})? A pessoa perde o acesso na hora.`)) chamar({ op: 'remover', id: u.id }); } })));
+    }));
+
+    const nome = el('input', { type: 'text', placeholder: 'Nome', ariaLabel: 'Nome', maxLength: 80, autocomplete: 'off' });
+    const email = el('input', { type: 'email', placeholder: 'nome@empresa.com', ariaLabel: 'E-mail', autocomplete: 'off' });
+    const nivel = el('select', { ariaLabel: 'Nível de acesso' }, [['editor', 'Editor: edita a página e vê os resultados'], ['admin', 'Administrador: também gerencia usuários']].map(([v, t]) => el('option', { value: v, textContent: t })));
+    const convidar = el('button', { type: 'button', className: 'preto', textContent: 'Enviar convite por e-mail' });
+    convidar.onclick = async () => {
+      convidar.disabled = true;
+      const d = await chamar({ op: 'criar', nome: nome.value, email: email.value, papel: nivel.value });
+      if (d?.usuarios) { nome.value = ''; email.value = ''; }
+      convidar.disabled = false;
+    };
+    usuariosApi({ op: 'listar' }).then(d => pintar(d.usuarios)).catch(e => mensagem(msg, e.message, 'erro'));
+    return [
+      el('h1', { textContent: 'Usuários' }),
+      el('p', { className: 'ajuda', textContent: 'Quem tem acesso a esta gestão. A pessoa recebe um e-mail para escolher a própria senha; se esquecer, troca sozinha pela tela de entrada ("Esqueci minha senha"), confirmando no e-mail cadastrado.' }),
+      el('div', { className: 'cartao', style: 'margin:14px 0 22px' },
+        el('b', { textContent: 'Convidar uma pessoa' }),
+        el('div', { className: 'form-u' },
+          el('div', { className: 'campo' }, el('label', {}, 'Nome', nome)),
+          el('div', { className: 'campo' }, el('label', {}, 'E-mail', email)),
+          el('div', { className: 'campo largo' }, el('label', {}, 'Nível de acesso', nivel))),
+        convidar),
+      el('h2', { textContent: 'Pessoas com acesso', style: 'margin-top:0' }), msg, lista,
+    ];
+  }
+
+  function vistaConta() {
+    const msg = el('p', { className: 'msg', role: 'status', hidden: true });
+    const campoSenha = (rotulo, auto) => { const i = el('input', { type: 'password', autocomplete: auto, minLength: 8, ariaLabel: rotulo }); return [i, el('div', { className: 'campo' }, el('label', {}, rotulo, i))]; };
+    const [atual, cAtual] = campoSenha('Senha atual', 'current-password');
+    const [nova, cNova] = campoSenha('Nova senha (mínimo 8 caracteres)', 'new-password');
+    const [conf, cConf] = campoSenha('Repita a nova senha', 'new-password');
+    const salvarSenha = el('button', { type: 'button', className: 'preto', textContent: 'Trocar minha senha' });
+    salvarSenha.onclick = async () => {
+      if (nova.value !== conf.value) return mensagem(msg, 'As duas senhas novas não são iguais.', 'erro');
+      salvarSenha.disabled = true;
+      try { await usuariosApi({ op: 'minha_senha', atual: atual.value, nova: nova.value }); atual.value = nova.value = conf.value = ''; mensagem(msg, 'Senha trocada. Você continua entrando neste aparelho; nos outros será preciso entrar de novo.', 'ok'); }
+      catch (e) { mensagem(msg, e.message, 'erro'); }
+      salvarSenha.disabled = false;
+    };
+    return [el('h1', { textContent: 'Minha conta' }),
+      el('div', { className: 'cartao' }, el('p', { className: 'ajuda', style: 'margin:0 0 12px', textContent: `${estado.eu.nome} · ${estado.eu.email} · ${NIVEL[estado.eu.papel]}` }),
+        el('b', { textContent: 'Trocar a senha' }), msg, cAtual, cNova, cConf, salvarSenha,
+        el('p', { className: 'ajuda', textContent: 'Esqueceu a senha atual? Saia e use "Esqueci minha senha" na tela de entrada.' }))];
+  }
+
+  // ---------- Vista: Histórico ----------
+  function vistaHistorico() {
+    const lista = el('div', {}, el('p', { className: 'ajuda', textContent: 'Carregando…' }));
+    fetch('/api/admin?historico=1').then(r => (r.ok ? r.json() : Promise.reject(new Error()))).then(itens => {
+      lista.replaceChildren(...(itens.length ? itens.map(h => el('article', { className: 'hist' },
+        el('header', {}, el('b', { textContent: h.usuario }), el('time', { dateTime: h.ts, textContent: new Date(h.ts).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) })),
+        el('ul', {}, h.mudancas.map(m => el('li', { textContent: m }))))) : [el('p', { className: 'ajuda', textContent: 'Nenhuma alteração salva ainda.' })]));
+    }).catch(() => lista.replaceChildren(el('p', { className: 'ajuda', textContent: 'Não foi possível carregar o histórico.' })));
+    return [el('h1', { textContent: 'Histórico' }), el('p', { className: 'ajuda', textContent: 'As últimas 100 alterações salvas: quando, quem e o que mudou.' }), lista];
+  }
+
+  // ---------- Navegação ----------
+  function ir(v) { vista = v; editando = null; aba = 'links'; desenhar(); scrollTo(0, 0); }
+  function editar(l) { vista = 'editor'; editando = l; aba = 'links'; desenhar(); scrollTo(0, 0); }
+  function desenhar() {
+    fecharMenus();
+    for (const b of document.querySelectorAll('[data-vista]')) {
+      if (b.dataset.vista === (vista === 'editor' ? 'blocos' : vista)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    }
+    document.querySelector('.app').classList.toggle('sem-previa', ['resultados', 'historico', 'usuarios', 'conta'].includes(vista));
+    $('centro').replaceChildren(...(vista === 'design' ? vistaDesign() : vista === 'historico' ? vistaHistorico() : vista === 'resultados' ? vistaResultados()
+      : vista === 'usuarios' && estado.eu.papel === 'admin' ? vistaUsuarios() : vista === 'conta' && !estado.eu.mestra ? vistaConta()
+      : vista === 'editor' && editando ? vistaEditor(editando) : vistaBlocos()));
+  }
+  for (const b of document.querySelectorAll('[data-vista]')) b.onclick = () => ir(b.dataset.vista);
+  $('m-grupo').onclick = () => ir('blocos');
+
+  // Endereço público à direita
+  const publico = location.origin + '/';
+  $('dominio').textContent = location.host;
+  $('abrir').href = publico;
+  $('copiar').onclick = async () => { try { await navigator.clipboard.writeText(publico); aviso('Endereço copiado.'); } catch { aviso(publico); } };
+
+  async function carregar() {
+    const d = await api();
+    const c = d.config;
+    try { c.redes = JSON.parse(c.redes || 'null'); } catch { c.redes = null; }
+    if (!Array.isArray(c.redes)) c.redes = c.instagram ? [{ rede: 'instagram', url: c.instagram, ativo: true }] : []; // páginas antigas
+    for (const l of d.links) {
+      l.opcoes = { ...PADRAO_OPCOES, ...(l.opcoes || {}) };
+      for (const f of l.filhos) f.opcoes ||= {};
+    }
+    estado = d;
+    $('eu-nome').textContent = d.eu.nome;
+    $('eu-papel').textContent = d.eu.mestra ? 'Conta mestra (emergência)' : `${NIVEL[d.eu.papel]} · ${d.eu.email}`;
+    $('m-usuarios').hidden = d.eu.papel !== 'admin';
+    $('minha-conta').hidden = d.eu.mestra;
+    if (editando) editando = estado.links.find(l => l.id === editando.id) || null; // Descartar volta ao bloco que estava aberto
+    if (vista === 'editor' && !editando) vista = 'blocos';
+    sujo = false; barra(); aviso('Tudo salvo');
+    desenhar();
+    enviarPrevia();
+  }
+  $('minha-conta').onclick = () => { if (sujo && !confirm('Há alterações não salvas. Sair desta tela mesmo assim?')) return; vista = 'conta'; editando = null; desenhar(); scrollTo(0, 0); };
+  $('sair').onclick = async () => {
+    if (sujo && !confirm('Há alterações não salvas. Sair mesmo assim?')) return;
+    sujo = false; // o aviso do navegador ao fechar a página não faz mais sentido
+    await fetch('/api/acesso', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'admin' }, body: JSON.stringify({ acao: 'sair' }) });
+    location.href = '/admin';
+  };
+  carregar().catch(e => aviso(e.message, true));
+</script>
+</body>
+</html>

@@ -1,1 +1,8 @@
-{ "rewrites": [{ "source": "/insights", "destination": "/api/insights" }] }
+{
+  "rewrites": [
+    { "source": "/insights", "destination": "/api/insights" },
+    { "source": "/admin", "destination": "/api/admin" }
+  ],
+  "redirects": [{ "source": "/comunidade", "destination": "https://www.instagram.com/channel/PMLvxmz7lSgijeV5/", "permanent": false }],
+  "functions": { "api/admin.js": { "includeFiles": "api/_{admin,login}.html" } }
+}

@@ -5,77 +5,387 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Peça Forno Paulista</title>
 <meta name="description" content="Escolha a unidade Forno Paulista mais perto de você e faça seu pedido.">
-<meta name="theme-color" content="#86201B">
+<meta name="theme-color" content="#581512">
+<link rel="icon" href="logo-app.png">
+<link rel="apple-touch-icon" href="logo-app.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Actor&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="animacoes.css">
 <style>
-  :root { --vinho: #86201B; --vinho-escuro: #5E1512; --fundo: #F4F4F5; --texto: #1D1D1F; }
+  :root { --vinho: #581512; --vinho-escuro: color-mix(in srgb, var(--vinho) 60%, #000); --texto: #1D1D1F; --capa: url(capa.jpg);
+    /* Ajustáveis no admin (Design) */
+    --cor-topo: #fff; --cor-bloco: #fff; --cor-texto: var(--vinho); --fonte: Actor; --raio: 36px; --sombra: none; --contorno: 0; }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh; font-family: Arial, sans-serif; color: var(--texto);
-    background: var(--vinho-escuro);
+  /* Medidas copiadas do Beacons (celular de 375 px): botões 335 px, margem 20, espaço 24, fonte Actor -0,42 px. */
+  body { margin: 0; min-height: 100vh; font-family: var(--fonte), "Segoe UI", Arial, sans-serif; letter-spacing: -0.42px; color: #fff; background: var(--vinho-escuro); }
+  main { --larg: min(100vw, 480px); position: relative; max-width: 480px; margin: 0 auto; min-height: 100vh; background: var(--vinho); display: flex; flex-direction: column; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+  /* Capa: 1,536 x a largura; escurece de 57% a 83% da altura; logo, Instagram e botões ficam por cima do fim da foto. */
+  .topo { position: relative; height: calc(var(--larg) * 1.536); overflow: hidden; }
+  .capa { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 60%; }
+  .topo::after { content: ""; position: absolute; left: 0; right: 0; top: 57%; bottom: 0; background: linear-gradient(transparent, var(--vinho) 61%); }
+  .logo { position: absolute; left: 50%; bottom: calc(22.2% + 12px); transform: translateX(-50%); width: 190px; height: auto; z-index: 1; }
+  .compartilhar { position: absolute; top: 14px; right: 14px; z-index: 2; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--cor-topo); display: none; place-items: center; cursor: pointer; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
+  .social { position: absolute; left: 0; right: 0; top: 77.8%; z-index: 1; display: flex; justify-content: center; gap: 4px; }
+  .social a { color: var(--cor-topo); display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; }
+
+  ul { list-style: none; margin: calc(var(--larg) * -0.1705) 0 0; padding: 0 20px; display: grid; gap: 24px; position: relative; z-index: 1; }
+  .pilula {
+    display: flex; align-items: center; justify-content: center; position: relative;
+    min-height: 56px; padding: 0 56px; border-radius: var(--raio); background: var(--cor-bloco); color: var(--cor-texto);
+    box-shadow: var(--sombra); border: var(--contorno);
+    text-decoration: none; text-align: center; font: 600 18px/1.1 var(--fonte), "Segoe UI", Arial, sans-serif;
+    transition: transform .1s;
   }
-  main {
-    max-width: 480px; margin: 0 auto; min-height: 100vh; padding: 16px 16px 24px;
-    background: var(--vinho) url(textura-tijolos.png) repeat; background-size: 96px 48px;
-    display: flex; flex-direction: column;
+  .pilula:active { transform: scale(.98); }
+  .pilula:focus-visible, .social a:focus-visible, .compartilhar:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+  details summary { list-style: none; cursor: pointer; }
+  details summary::-webkit-details-marker { display: none; }
+  .seta { position: absolute; right: 18px; top: 50%; margin-top: -12px; transition: transform .2s; }
+  details[open] .seta { transform: rotate(180deg); }
+  details.fechando .seta { transform: none; } /* a seta volta enquanto o cartão recolhe */
+  .acoes { display: grid; gap: 16px; padding-top: 12px; }
+  .acao { min-height: 65px; font: 400 16px/1.4 var(--fonte), "Segoe UI", Arial, sans-serif; }
+  .icone { position: absolute; left: 16px; top: 50%; margin-top: -22.5px; width: 45px; height: 45px; display: grid; place-items: center; }
+  .icone-img { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; }
+  .acao .texto { display: flex; flex-direction: column; }
+  .acao small { font-size: 13px; opacity: .75; margin-top: 1px; }
+  /* Opções do bloco (aba Layout do admin) */
+  .tam-g .acao { min-height: 80px; font-size: 18px; }
+  .alin-esquerda .acao { justify-content: flex-start; text-align: left; padding-left: 76px; }
+  .alin-direita .acao { justify-content: flex-end; text-align: right; padding-right: 24px; }
+  summary .icone { left: 6px; }
+  .aberto h2 { margin: 0; text-align: center; color: var(--cor-topo); font: 600 18px/1.3 var(--fonte), "Segoe UI", Arial, sans-serif; }
+  .aberto > p { margin: 2px 0 0; text-align: center; color: var(--cor-topo); opacity: .8; font-size: 14px; }
+
+  /* Layout Card: imagem quadrada de um lado (esquerda ou direita), texto do outro */
+  .cartao { display: grid; grid-template-columns: 1fr 1fr; aspect-ratio: 2 / 1; color: var(--cor-texto); text-decoration: none; }
+  .cartao.sem-img { grid-template-columns: 1fr; aspect-ratio: auto; min-height: 96px; }
+  .cartao .img { overflow: hidden; display: grid; place-items: center; color: var(--cor-topo); }
+  .cartao .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cartao .txt { background: var(--cor-bloco); border-radius: 0 var(--raio) var(--raio) 0; box-shadow: var(--sombra); border: var(--contorno); padding: 0 14px; display: flex; flex-direction: column; justify-content: center; text-align: center; font-size: 16px; line-height: 1.25; }
+  .cartao.sem-img .txt { border-radius: var(--raio); padding: 16px 24px; }
+  .img-direita .cartao .img { order: 2; }
+  .img-direita .cartao .txt { border-radius: var(--raio) 0 0 var(--raio); }
+  .cartao b { font-weight: 600; margin-bottom: 2px; }
+  .cartao, .carrossel > * { position: relative; }
+  /* Etiqueta no canto do botão (NOVO, PROMO...) */
+  .etiqueta { position: absolute; top: -9px; right: 18px; z-index: 1; padding: 1px 10px; border-radius: 99px; background: var(--cor-texto); color: var(--cor-bloco); font: 600 11px/1.6 var(--fonte), Arial, sans-serif; letter-spacing: .04em; text-transform: uppercase; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+  .carrossel .etiqueta { top: 8px; right: 8px; }
+  .txt-p .cartao .txt { font-size: 13px; } .txt-m .cartao .txt { font-size: 14.5px; } .txt-gg .cartao .txt { font-size: 19px; }
+  .alin-esquerda .cartao .txt { text-align: left; } .alin-direita .cartao .txt { text-align: right; }
+  .cartao:focus-visible { outline: 3px solid #fff; outline-offset: 3px; border-radius: 36px; }
+
+  /* Layout Carrossel: imagens lado a lado que deslizam, com setas e barra de posição */
+  .carrossel { display: grid; grid-auto-flow: column; grid-auto-columns: 47%; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .carrossel::-webkit-scrollbar { display: none; }
+  .tam-g .carrossel { grid-auto-columns: 82%; }
+  .carrossel > * { display: block; scroll-snap-align: start; aspect-ratio: 3 / 4; border-radius: min(var(--raio), 24px); overflow: hidden; background: rgba(255,255,255,.08); box-shadow: var(--sombra); border: var(--contorno); }
+  .carrossel img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .carrossel a:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
+  .carrossel-nav { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .carrossel-nav button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: var(--cor-topo); cursor: pointer; }
+  .carrossel-nav .trilho { position: relative; flex: 1; height: 8px; }
+  .carrossel-nav .polegar { position: absolute; top: 0; height: 100%; min-width: 24px; border-radius: 99px; background: rgba(255,255,255,.55); transition: left .1s; }
+
+  footer { margin-top: auto; padding: 36px 20px 24px; color: rgba(255,255,255,.65); font-size: .72rem; text-align: center; }
+  /* Tela larga (Beacons a partir de 600 px): foto desfocada no fundo, cartão vinho de até 720 px,
+     foto 420x520 com cantos de 16 px, botões de 560 px começando 32 px abaixo da foto. */
+  @media (min-width: 600px) {
+    body { background: #F0F0F0; }
+    body::before { content: ""; position: fixed; inset: -60px; z-index: -1; background: var(--capa) center / cover; filter: blur(40px); }
+    main { max-width: 720px; min-height: 0; margin: 72px auto; padding-top: 64px; border-radius: 24px; }
+    .topo { width: 420px; height: 520px; margin: 0 auto; overflow: visible; }
+    .capa { border-radius: 16px; object-position: center top; }
+    .topo::after { top: auto; height: 144px; border-radius: 0 0 16px 16px; background: linear-gradient(transparent, var(--vinho)); }
+    .logo { bottom: 44px; }
+    .social { top: 488px; }
+    ul { width: 600px; max-width: 100%; margin: 32px auto 0; }
+    .compartilhar { top: 20px; right: 20px; }
   }
-  .topo { position: relative; }
-  .capa { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; object-position: center 65%; border-radius: 20px; display: block; background: var(--vinho-escuro); }
-  .topo::after { content: ""; position: absolute; inset: 55% 0 0; border-radius: 0 0 20px 20px; background: linear-gradient(transparent, rgba(0,0,0,.6)); }
-  .logo { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: 140px; height: auto; z-index: 1; }
-  h1 { color: #fff; font: 700 1.25rem/1.3 "Libre Baskerville", Georgia, serif; text-align: center; margin: 20px 0 16px; }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-  a.loja {
-    display: flex; flex-direction: column; justify-content: center; align-items: center;
-    min-height: 60px; padding: 10px 24px; border-radius: 999px; background: #fff; color: var(--vinho);
-    text-decoration: none; text-align: center; font: 700 1rem/1.3 "Libre Baskerville", Georgia, serif;
-    transition: transform .1s, background-color .1s;
-  }
-  a.loja small { font: .8rem/1.3 Arial, sans-serif; color: #6B6B70; margin-top: 2px; }
-  a.loja:hover { background: var(--fundo); }
-  a.loja:active { transform: scale(.98); }
-  a.loja:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-  footer { margin-top: auto; padding-top: 28px; color: rgba(255,255,255,.8); font-size: .75rem; text-align: center; }
-  @media (prefers-reduced-motion: reduce) { a.loja { transition: none; } }
+  /* Estilo "Largura total": blocos de ponta a ponta, sem cantos */
+  body.largo ul { padding: 0; width: 100%; }
+  @media (prefers-reduced-motion: reduce) { .pilula, .seta { transition: none; } }
 </style>
 </head>
 <body>
 <main>
   <div class="topo">
-    <img class="capa" src="capa.jpg" alt="" width="900" height="900" fetchpriority="high">
-    <img class="logo" src="logo-branca.png" alt="Forno Paulista Pizzaria" width="320" height="186">
+    <img class="capa" id="capa" src="capa.jpg" alt="" width="900" height="1352" fetchpriority="high">
+    <img class="logo" id="logo" src="logo-branca.png" alt="Forno Paulista Pizzaria" width="320" height="186">
+    <div class="social" id="social"></div>
   </div>
-  <h1>Escolha sua unidade</h1>
+  <button class="compartilhar" id="compartilhar" aria-label="Compartilhar" type="button">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.6M8.2 13.2l7.6 4.6"/></svg>
+  </button>
+  <h1 class="sr" id="titulo">Escolha sua unidade</h1>
   <ul id="lojas"></ul>
-  <footer>Não usamos cookies nem coletamos dados pessoais. Contamos só os cliques por unidade.</footer>
+  <footer id="rodape">Não usamos cookies nem coletamos dados pessoais. Contamos só os cliques por unidade.</footer>
 </main>
 <script src="lojas.js"></script>
+<script src="icones.js"></script>
 <script>
   // Repassa todos os utm_* recebidos; sem eles, marca como acesso direto ao hub.
   const recebidos = new URLSearchParams(location.search);
   const utm = new URLSearchParams([...recebidos].filter(([k]) => k.startsWith('utm_')));
   if (!utm.has('utm_source')) utm.set('utm_source', 'hub');
   if (!utm.has('utm_medium')) utm.set('utm_medium', 'direto');
+  const base = { origem: utm.get('utm_source'), meio: utm.get('utm_medium'), campanha: utm.get('utm_campaign') };
 
   const { rastreio, lojas } = CONFIG;
-  const ul = document.getElementById('lojas');
-  for (const loja of lojas) {
-    const a = document.createElement('a');
-    a.className = 'loja';
-    a.href = `https://fornopaulista.tuigoapp.com.br/${encodeURIComponent(loja.slug)}/pedidos?${utm}`;
-    a.textContent = loja.nome;
-    if (loja.endereco) a.append(Object.assign(document.createElement('small'), { textContent: loja.endereco }));
-    // keepalive: o registro sobrevive à troca de página; se falhar, o cliente segue para a loja igual.
-    if (rastreio) a.addEventListener('click', () => {
-      const q = new URLSearchParams({ tipo: 'clique', campanha: utm.get('utm_campaign') || 'sem_campanha', loja: loja.slug });
-      fetch(`${rastreio}?${q}`, { keepalive: true, mode: 'no-cors' }).catch(() => {});
-    });
-    const li = document.createElement('li');
-    li.append(a);
-    ul.append(li);
+  // sendBeacon sobrevive à troca de página; se falhar, o cliente segue para o destino igual.
+  // ?previa=1 (usado pelo admin) não conta visita nem clique.
+  const previa = recebidos.has('previa');
+  const registrar = e => { if (previa) return; try { navigator.sendBeacon('/api/evento', JSON.stringify({ ...base, ...e })); } catch {} };
+
+  // Lista de reserva (lojas.js) para quando o banco estiver fora do ar: só os pedidos.
+  const reserva = () => ({
+    config: {},
+    links: lojas.map(l => ({ id: null, tipo: 'bloco', titulo: l.nome, loja: l.slug, opcoes: { visibilidade: 'recolhido' }, filhos: [
+      { id: null, tipo: 'acao', acao: 'pedido', titulo: 'Faça Seu Pedido', url: `https://fornopaulista.tuigoapp.com.br/${encodeURIComponent(l.slug)}/pedidos`, loja: l.slug, utm: true },
+    ] })),
+  });
+
+  const seguro = u => (/^(https?:\/\/|mailto:|tel:)/i.test(u || '') ? u : '#');
+  function destino(l) {
+    const u = new URL(seguro(l.url), location.href);
+    if (l.utm) for (const [k, v] of utm) u.searchParams.set(k, v);
+    return u.href;
   }
+  const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls || '', textContent: txt || '' });
+
+  function clicar(a, l) {
+    a.href = destino(l);
+    a.addEventListener('click', () => {
+      registrar({ tipo: 'click', link_id: l.id, loja: l.loja, acao: l.acao });
+      // E-mail marketing: o painel de campanhas ainda lê os cliques de pedido do n8n.
+      if (rastreio && !previa && l.acao === 'pedido') {
+        const q = new URLSearchParams({ tipo: 'clique', campanha: utm.get('utm_campaign') || 'sem_campanha', loja: l.loja });
+        fetch(`${rastreio}?${q}`, { keepalive: true, mode: 'no-cors' }).catch(() => {});
+      }
+    });
+    return a;
+  }
+
+  // Ícone do botão: o escolhido no admin (i:nome da biblioteca ou uma imagem); sem escolha, o padrão da ação.
+  const ehImagem = v => !!v && v !== 'nenhum' && !v.startsWith('i:');
+  function icone(l) {
+    if (l.icone === 'nenhum') return null;
+    const v = l.icone || (ICONES[l.acao] ? `i:${l.acao}` : '');
+    const s = el('span', 'icone');
+    s.setAttribute('aria-hidden', 'true');
+    if (ehImagem(v)) s.append(Object.assign(new Image(), { src: v, alt: '', loading: 'lazy', className: 'icone-img' }));
+    else s.innerHTML = iconeSvg(v.slice(2), 34, 1.3);
+    return s.childNodes.length ? s : null;
+  }
+
+  // Agenda do link: fora do período escolhido ele não aparece (a prévia do admin mostra tudo).
+  const noAr = f => previa || ((!f.opcoes?.inicio || Date.now() >= Date.parse(f.opcoes.inicio)) && (!f.opcoes?.fim || Date.now() < Date.parse(f.opcoes.fim)));
+  // Personalização do link: animação, cores só deste botão e etiqueta no canto.
+  function extras(a, f, alvoCor = a) {
+    const o = f.opcoes || {};
+    if (o.animacao) a.classList.add(`anim-${o.animacao}`);
+    if (o.cor_bloco) alvoCor.style.setProperty('--cor-bloco', o.cor_bloco);
+    if (o.cor_texto) alvoCor.style.setProperty('--cor-texto', o.cor_texto);
+    if (o.etiqueta) a.append(el('span', 'etiqueta', o.etiqueta));
+    return a;
+  }
+
+  function acao(l) {
+    const a = clicar(el('a', 'pilula acao'), l);
+    const i = icone(l);
+    if (i) a.append(i);
+    const t = el('span', 'texto', l.titulo);
+    if (l.subtitulo && l.tipo === 'acao') t.append(el('small', '', l.subtitulo));
+    a.append(t);
+    return extras(a, l);
+  }
+
+  // Layout Card: imagem do próprio link (ou ícone grande) + título e subtítulo.
+  function cartao(f) {
+    const a = clicar(el('a', 'cartao'), f);
+    const v = f.icone || '';
+    if (ehImagem(v) || v.startsWith('i:')) {
+      const i = el('div', 'img');
+      if (ehImagem(v)) i.append(Object.assign(new Image(), { src: v, alt: '', loading: 'lazy' }));
+      else i.innerHTML = iconeSvg(v.slice(2), 64, 1.2);
+      a.append(i);
+    } else a.classList.add('sem-img');
+    const t = el('div', 'txt');
+    t.append(el('b', '', f.titulo));
+    if (f.subtitulo) t.append(el('span', '', f.subtitulo));
+    a.append(t);
+    return extras(a, f);
+  }
+
+  // Layout Carrossel: só as imagens; setas e barra mostram onde está.
+  function carrossel(filhos) {
+    const trilho = el('div', 'carrossel');
+    for (const f of filhos) {
+      const a = f.url ? clicar(el('a'), f) : el('div'); // sem link: a foto só aparece
+      a.setAttribute('aria-label', f.titulo || 'Abrir');
+      if (ehImagem(f.icone)) a.append(Object.assign(new Image(), { src: f.icone, alt: f.titulo || '', loading: 'lazy' }));
+      trilho.append(extras(a, f));
+    }
+    const polegar = el('span', 'polegar');
+    const barra = el('span', 'trilho');
+    barra.append(polegar);
+    const seta = (lado, rotulo, desenho) => {
+      const b = el('button');
+      b.type = 'button';
+      b.setAttribute('aria-label', rotulo);
+      b.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="${desenho}"/></svg>`;
+      b.onclick = () => trilho.scrollBy({ left: lado * trilho.clientWidth * 0.8, behavior: 'smooth' });
+      return b;
+    };
+    const nav = el('div', 'carrossel-nav');
+    nav.append(seta(-1, 'Anterior', 'M17 3v18L5 12z'), barra, seta(1, 'Próxima', 'M7 3v18l12-9z'));
+    const atualizar = () => {
+      const total = trilho.scrollWidth || 1;
+      polegar.style.width = `${(trilho.clientWidth / total) * 100}%`;
+      polegar.style.left = `${(trilho.scrollLeft / total) * 100}%`;
+      nav.hidden = trilho.scrollWidth <= trilho.clientWidth + 1; // tudo cabe: sem setas
+    };
+    trilho.addEventListener('scroll', atualizar, { passive: true });
+    new ResizeObserver(atualizar).observe(trilho); // também quando um bloco recolhido abre
+    const caixa = el('div');
+    caixa.append(trilho, nav);
+    return caixa;
+  }
+
+  // Bloco: os links no layout escolhido (Clássico, Card ou Carrossel), aberto ou recolhido.
+  function bloco(l) {
+    const o = l.opcoes || {};
+    const filhos = l.filhos.filter(noAr);
+    if (!filhos.length && l.filhos.length) return null; // todos os links fora do período agendado
+    const lista = el('div', `acoes tam-${o.tamanho || 'p'} alin-${o.alinhamento || 'centro'} img-${o.posicao_imagem || 'esquerda'} txt-${o.tamanho_texto || 'g'}`);
+    if (o.contorno) lista.style.setProperty('--contorno', '2px solid var(--cor-texto)');
+    if (o.sombra) lista.style.setProperty('--sombra', '0 4px 14px rgba(0,0,0,.28)');
+    if (o.layout === 'carrossel') lista.append(carrossel(filhos));
+    else for (const f of filhos) lista.append(o.layout === 'card' ? cartao(f) : acao(f));
+
+    if (o.visibilidade !== 'recolhido') {
+      const b = el('div', 'aberto');
+      if (l.titulo) b.append(el('h2', '', l.titulo));
+      if (l.subtitulo) b.append(el('p', '', l.subtitulo));
+      if (!l.titulo && !l.subtitulo) lista.style.paddingTop = '0';
+      b.append(lista);
+      return b;
+    }
+    const d = el('details');
+    const s = el('summary', 'pilula', l.titulo || l.nome);
+    if (ehImagem(o.miniatura)) { // imagem do botão recolhido (aba Configurações)
+      const m = el('span', 'icone');
+      m.setAttribute('aria-hidden', 'true');
+      m.append(Object.assign(new Image(), { src: o.miniatura, alt: '', className: 'icone-img' }));
+      s.prepend(m);
+    }
+    s.insertAdjacentHTML('beforeend', '<svg class="seta" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>');
+    d.append(s, lista); // como no Beacons, o subtítulo não aparece no botão recolhido
+    // Abrir e fechar suave: a lista cresce/recolhe (altura + transparência). Sem animação para quem prefere menos movimento.
+    const respiro = '12px'; // o mesmo padding-top de .acoes
+    const animar = (de, para, fim) => {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return fim?.();
+      lista.style.overflow = 'hidden';
+      const a = lista.animate([de, para], { duration: 280, easing: 'cubic-bezier(.2, .7, .2, 1)' });
+      const pronto = () => { lista.style.overflow = ''; fim?.(); };
+      a.finished.then(pronto, pronto); // a promessa resolve mesmo sem quadro desenhado (o evento onfinish não)
+      setTimeout(() => { if (a.playState === 'running') a.finish(); }, 400); // se a página parar de desenhar no meio (app em segundo plano), conclui mesmo assim
+    };
+    d.fechar = () => {
+      if (!d.open || d.classList.contains('fechando')) return;
+      d.classList.add('fechando');
+      animar({ height: `${lista.offsetHeight}px`, paddingTop: respiro, opacity: 1 }, { height: '0px', paddingTop: '0px', opacity: 0 }, () => { d.open = false; d.classList.remove('fechando'); });
+    };
+    s.addEventListener('click', e => {
+      e.preventDefault(); // o navegador abriria/fecharia de uma vez; fazemos com animação
+      if (d.open) return d.fechar();
+      d.open = true;
+      animar({ height: '0px', paddingTop: '0px', opacity: 0 }, { height: `${lista.offsetHeight}px`, paddingTop: respiro, opacity: 1 });
+    });
+    d.addEventListener('toggle', () => {
+      if (!d.open) return;
+      registrar({ tipo: 'abrir', link_id: l.id, loja: l.loja });
+      for (const x of document.querySelectorAll('details[open]')) if (x !== d) x.fechar ? x.fechar() : (x.open = false); // um bloco aberto por vez
+    });
+    return d;
+  }
+
+  function desenhar({ config: c, links }) {
+    document.documentElement.removeAttribute('style');
+    document.getElementById('social').replaceChildren();
+    document.getElementById('lojas').replaceChildren();
+    const css = (k, v) => document.documentElement.style.setProperty(k, v);
+    if (c.cor) css('--vinho', c.cor);
+    if (c.cor_topo) css('--cor-topo', c.cor_topo);
+    if (c.cor_bloco) css('--cor-bloco', c.cor_bloco);
+    if (c.cor_texto) css('--cor-texto', c.cor_texto);
+    if (c.sombra === '1') css('--sombra', '0 4px 14px rgba(0,0,0,.28)');
+    if (c.contorno === '1') css('--contorno', '2px solid var(--cor-texto)');
+    const RAIO = { oval: '36px', arredondado: '12px', quadrado: '0', largo: '0' };
+    if (RAIO[c.estilo]) css('--raio', RAIO[c.estilo]);
+    document.body.classList.toggle('largo', c.estilo === 'largo');
+    if (c.fonte && c.fonte !== 'Actor') { // a fonte já foi conferida pelo admin (lista fechada)
+      document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: `https://fonts.googleapis.com/css2?family=${encodeURIComponent(c.fonte).replace(/%20/g, '+')}&display=swap` }));
+      css('--fonte', `"${c.fonte}"`);
+    }
+    if (c.titulo) document.getElementById('titulo').textContent = c.titulo;
+    if (c.rodape) document.getElementById('rodape').textContent = c.rodape;
+    if (c.capa) {
+      document.getElementById('capa').src = c.capa;
+      document.documentElement.style.setProperty('--capa', `url(${JSON.stringify(c.capa)})`); // fundo desfocado no desktop
+    }
+    const logo = c.logo || 'logo-branca.png';
+    document.getElementById('logo').src = logo;
+    // Ícones sociais do topo (lista do admin); páginas antigas só tinham o Instagram.
+    let redes = [];
+    try { redes = c.redes ? JSON.parse(c.redes) : []; } catch {}
+    if (!c.redes && c.instagram) redes = [{ rede: 'instagram', url: c.instagram, ativo: true }];
+    for (const r of redes) {
+      if (r.ativo === false || !ICONES[r.rede]) continue;
+      const a = el('a');
+      a.href = seguro(r.url);
+      a.setAttribute('aria-label', ICONES[r.rede][0]);
+      a.innerHTML = iconeSvg(r.rede, 30, 1.8);
+      a.addEventListener('click', () => registrar({ tipo: 'click', acao: r.rede }));
+      document.getElementById('social').append(a);
+    }
+    const ul = document.getElementById('lojas');
+    for (const l of links) {
+      const li = document.createElement('li');
+      const b = bloco(l);
+      if (!b) continue;
+      li.append(b);
+      ul.append(li);
+    }
+  }
+
+  // Botão de compartilhar: só onde o aparelho oferece o menu nativo (celulares).
+  if (navigator.share) {
+    const b = document.getElementById('compartilhar');
+    b.style.display = 'grid';
+    b.addEventListener('click', () => {
+      registrar({ tipo: 'click', acao: 'compartilhar' });
+      navigator.share({ title: document.title, url: location.origin + location.pathname }).catch(() => {});
+    });
+  }
+
+  // Prévia do admin: desenha o rascunho (ainda não salvo) que a tela de gestão manda. Só aceita mensagens deste mesmo site.
+  let rascunho = false;
+  if (previa) addEventListener('message', e => {
+    if (e.origin !== location.origin || e.data?.tipo !== 'previa') return;
+    rascunho = true;
+    desenhar(e.data.dados);
+  });
+
+  registrar({ tipo: 'view' });
+  fetch(previa ? '/api/pagina?previa=1' : '/api/pagina', { signal: AbortSignal.timeout(3000) })
+    .then(r => (r.ok ? r.json() : Promise.reject()))
+    .catch(reserva)
+    .then(d => { if (!rascunho) desenhar(d); });
 </script>
 </body>
 </html>

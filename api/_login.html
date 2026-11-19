@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Entrar · Pede Forno</title>
+<link rel="icon" href="/logo-app.png">
+<link rel="apple-touch-icon" href="/logo-app.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: light; --borda: #E6E6E6; --mudo: #6B6B70; --texto: #1C1C1C; --vinho: #581512; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; font: 15px/1.45 Poppins, "Segoe UI", Arial, sans-serif; color: var(--texto); background: #F6F4F3; }
+  main { width: 100%; max-width: 400px; background: #fff; border: 1px solid var(--borda); border-radius: 16px; padding: 32px 28px 28px; box-shadow: 0 8px 30px rgba(0,0,0,.06); }
+  .logo { display: block; width: 72px; height: 72px; border-radius: 50%; margin: 0 auto 14px; }
+  h1 { margin: 0 0 4px; font-size: 1.3rem; font-weight: 600; text-align: center; }
+  .sub { margin: 0 0 22px; text-align: center; color: var(--mudo); font-size: .9rem; }
+  label { display: block; font-size: .85rem; color: var(--mudo); margin: 14px 0 4px; }
+  input { width: 100%; height: 46px; border: 1px solid #CFCFD4; border-radius: 10px; padding: 0 14px; font: inherit; color: var(--texto); background: #fff; }
+  input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #2563EB; outline-offset: 2px; }
+  .senha { position: relative; }
+  .senha input { padding-right: 76px; }
+  .senha button { position: absolute; right: 6px; top: 6px; height: 34px; border: 0; background: none; color: var(--mudo); font: inherit; font-size: .8rem; border-radius: 8px; padding: 0 10px; cursor: pointer; }
+  .principal { width: 100%; height: 48px; margin-top: 22px; border: 0; border-radius: 10px; background: var(--vinho); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  .principal:disabled { opacity: .55; cursor: default; }
+  .links { margin: 16px 0 0; text-align: center; font-size: .88rem; }
+  .links a { color: var(--vinho); font-weight: 500; text-decoration: underline; cursor: pointer; background: none; border: 0; font: inherit; padding: 0; }
+  #aviso { margin: 16px 0 0; padding: 10px 14px; border-radius: 10px; font-size: .88rem; display: none; }
+  #aviso.erro { display: block; background: #FDECEA; color: #8A1C14; }
+  #aviso.ok { display: block; background: #E8F5EC; color: #14532D; }
+  .dica { font-size: .8rem; color: var(--mudo); margin: 6px 0 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="/logo-app.png" alt="Forno Paulista" width="72" height="72">
+
+  <form id="f-entrar" autocomplete="on">
+    <h1>Pede Forno · Gestão</h1>
+    <p class="sub">Entre para editar a página e ver os resultados.</p>
+    <label for="e-email">E-mail</label>
+    <input id="e-email" name="email" type="text" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+    <label for="e-senha">Senha</label>
+    <div class="senha"><input id="e-senha" name="senha" type="password" autocomplete="current-password" required><button type="button" data-mostrar="e-senha" aria-pressed="false">Mostrar</button></div>
+    <button class="principal" type="submit">Entrar</button>
+    <p class="links"><a href="#" id="ir-esqueci">Esqueci minha senha</a></p>
+  </form>
+
+  <form id="f-esqueci" hidden>
+    <h1>Trocar a senha</h1>
+    <p class="sub">Digite o e-mail cadastrado. Enviamos um link para você escolher uma senha nova.</p>
+    <label for="q-email">E-mail</label>
+    <input id="q-email" type="email" autocomplete="email" autocapitalize="off" spellcheck="false" required>
+    <button class="principal" type="submit">Enviar link por e-mail</button>
+    <p class="links"><a href="#" id="ir-entrar">Voltar para entrar</a></p>
+  </form>
+
+  <form id="f-nova" hidden>
+    <h1 id="n-titulo">Escolha a sua senha</h1>
+    <p class="sub" id="n-sub"></p>
+    <label for="n-senha">Nova senha</label>
+    <div class="senha"><input id="n-senha" type="password" autocomplete="new-password" minlength="8" required><button type="button" data-mostrar="n-senha" aria-pressed="false">Mostrar</button></div>
+    <p class="dica">Pelo menos 8 caracteres.</p>
+    <label for="n-conf">Repita a senha</label>
+    <input id="n-conf" type="password" autocomplete="new-password" minlength="8" required>
+    <button class="principal" type="submit">Salvar senha</button>
+  </form>
+
+  <div id="aviso" role="status" aria-live="polite"></div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  const token = new URLSearchParams(location.search).get('redefinir');
+  const aviso = (t, tipo) => { const a = $('aviso'); a.textContent = t || ''; a.className = t ? tipo : ''; };
+  const mostrar = id => { for (const f of ['f-entrar', 'f-esqueci', 'f-nova']) $(f).hidden = f !== id; aviso(''); $(id).querySelector('input')?.focus(); };
+
+  async function chamar(corpo) {
+    const r = await fetch('/api/acesso', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'admin' }, body: JSON.stringify(corpo) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erro || `Erro ${r.status}`);
+    return d;
+  }
+  // Envia o formulário com o botão travado enquanto espera (evita clicar duas vezes).
+  function enviar(form, fazer) {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const b = form.querySelector('.principal'); b.disabled = true; aviso('');
+      try { await fazer(); } catch (x) { aviso(x.message, 'erro'); }
+      b.disabled = false;
+    });
+  }
+
+  for (const b of document.querySelectorAll('[data-mostrar]')) b.onclick = () => {
+    const i = $(b.dataset.mostrar); const ver = i.type === 'password';
+    i.type = ver ? 'text' : 'password'; b.textContent = ver ? 'Esconder' : 'Mostrar'; b.setAttribute('aria-pressed', String(ver));
+  };
+  $('ir-esqueci').onclick = e => { e.preventDefault(); $('q-email').value = $('e-email').value.includes('@') ? $('e-email').value : ''; mostrar('f-esqueci'); };
+  $('ir-entrar').onclick = e => { e.preventDefault(); mostrar('f-entrar'); };
+
+  enviar($('f-entrar'), async () => {
+    await chamar({ acao: 'entrar', email: $('e-email').value, senha: $('e-senha').value });
+    location.href = '/admin'; // agora há sessão: a página abre o painel
+  });
+  enviar($('f-esqueci'), async () => {
+    const d = await chamar({ acao: 'esqueci', email: $('q-email').value });
+    aviso(d.mensagem, 'ok');
+  });
+  enviar($('f-nova'), async () => {
+    if ($('n-senha').value !== $('n-conf').value) throw new Error('As duas senhas não são iguais.');
+    await chamar({ acao: 'redefinir', token, senha: $('n-senha').value });
+    history.replaceState(null, '', '/admin'); // tira o link da barra de endereço
+    mostrar('f-entrar');
+    aviso('Senha salva! Agora é só entrar.', 'ok');
+  });
+
+  if (token) { // chegou pelo link do e-mail: confere se ainda vale
+    fetch(`/api/acesso?token=${encodeURIComponent(token)}`).then(async r => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { history.replaceState(null, '', '/admin'); mostrar('f-entrar'); return aviso(d.erro || 'Este link não vale mais.', 'erro'); }
+      const convite = d.tipo === 'convite';
+      $('n-titulo').textContent = `Olá, ${d.nome}!`; // o nome vem do cadastro; textContent não executa nada
+      $('n-sub').textContent = convite ? 'Escolha uma senha para entrar na gestão do Pede Forno.' : 'Escolha uma senha nova para a sua conta.';
+      mostrar('f-nova');
+    }).catch(() => aviso('Não foi possível conferir o link agora. Tente de novo.', 'erro'));
+  }
+</script>
+</body>
+</html>
