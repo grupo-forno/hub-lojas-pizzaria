@@ -56,6 +56,7 @@ create table if not exists sessoes (
   mestra boolean not null default false, -- entrou com a conta mestra (INSIGHTS_USER)
   expira timestamptz not null
 );
+alter table sessoes add column if not exists impressao text; -- só na conta mestra: resumo da senha atual; se a senha mudar, a sessão deixa de valer
 create table if not exists redefinicoes (
   hash text primary key,
   usuario_id int not null references usuarios(id) on delete cascade,

@@ -70,7 +70,7 @@ http.createServer((req, res) => {
     res.setHeader('content-type', tipos[path.extname(f)] || 'application/octet-stream');
     res.end(d);
   });
-}).listen(PORTA, () => console.log(`\nAbra: http://localhost:${PORTA}/?utm_source=instagram&utm_medium=bio\nGestão: http://localhost:${PORTA}/admin  (conta mestra: ${process.env.INSIGHTS_USER} / ${process.env.INSIGHTS_PASS}; os e-mails de convite aparecem neste terminal)\nCtrl+C para parar.`));
+}).listen(PORTA, () => console.log(`\nAbra: http://localhost:${PORTA}/?utm_source=instagram&utm_medium=bio\nGestão: http://localhost:${PORTA}/admin  (na tela de entrada, conta mestra: usuário ${process.env.INSIGHTS_USER} / senha ${process.env.INSIGHTS_PASS}; os e-mails de convite aparecem neste terminal)\nCtrl+C para parar.`));
 
 const sair = () => { docker('stop', 'pf-teste'); process.exit(); };
 process.on('SIGINT', sair); // Ctrl+C: desliga o banco também

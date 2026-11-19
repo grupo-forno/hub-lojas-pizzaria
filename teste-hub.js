@@ -11,8 +11,7 @@ process.env.EMAIL_MODO = 'teste'; // nenhum e-mail sai de verdade; o teste lê o
 process.env.INSIGHTS_USER ||= 'admin';
 process.env.INSIGHTS_PASS ||= 'admin';
 const basic = (u, s) => ({ authorization: 'Basic ' + Buffer.from(`${u}:${s}`).toString('base64') });
-const login = basic(process.env.INSIGHTS_USER, process.env.INSIGHTS_PASS);
-const NOSSA_TELA = { ...login, 'x-requested-with': 'admin' };
+let login, NOSSA_TELA; // sessão da conta mestra, aberta pelo formulário de entrada logo no início
 const comoCookie = c => ({ cookie: c, 'x-requested-with': 'admin' });
 const cookieDe = r => String(r.h['Set-Cookie'] || '').split(';')[0];
 const tokenDe = email => { const m = [...caixaDeTestes].reverse().find(x => x.para === email); return m && new URL(m.link).searchParams.get('redefinir'); };
@@ -37,6 +36,9 @@ const chamar = (h, req) => new Promise(ok => {
   imagem = require('./api/imagem.js');
   acesso = require('./api/acesso.js');
   ({ caixaDeTestes } = require('./api/_lib/email.js'));
+  const entradaMestra = await chamar(acesso, { url: '/api/acesso', headers: { 'x-requested-with': 'admin' }, body: { acao: 'entrar', email: process.env.INSIGHTS_USER, senha: process.env.INSIGHTS_PASS } });
+  login = { cookie: String(entradaMestra.h['Set-Cookie']).split(';')[0] };
+  NOSSA_TELA = { ...login, 'x-requested-with': 'admin' };
 
   // Migração: um banco no formato da PRIMEIRA versão (o que está em produção hoje) vira blocos, sem perder ids nem cliques.
   {
@@ -145,6 +147,11 @@ const chamar = (h, req) => new Promise(ok => {
   assert.ok(String(entrada.d).includes('Esqueci minha senha'));
   assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1' })).c, 401); // e os dados são negados
   assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1', headers: basic('x', 'y') })).c, 401);
+  // A senha "do navegador" (Basic), mesmo a certa, NÃO abre o admin: o navegador a reenvia sozinho e o "Sair" nunca funcionaria.
+  const senhaDoNavegador = basic(process.env.INSIGHTS_USER, process.env.INSIGHTS_PASS);
+  assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1', headers: senhaDoNavegador })).c, 401);
+  assert.ok(String((await chamar(admin, { method: 'GET', url: '/admin', headers: senhaDoNavegador })).d).includes('Esqueci minha senha')); // continua vendo a tela de entrada
+  assert.equal((await chamar(imagem, { headers: { ...senhaDoNavegador, 'x-requested-with': 'admin' }, body: { tipo: 'image/png', dados: 'AAAA' } })).c, 401);
   const tela = await chamar(admin, { method: 'GET', url: '/admin', headers: login });
   assert.equal(tela.c, 200);
   assert.ok(String(tela.d).includes('Pede Forno'));
@@ -197,6 +204,16 @@ const chamar = (h, req) => new Promise(ok => {
   assert.equal(semCabecalho.c, 403); // de outro site não passa
   const mestre = await acessar({ acao: 'entrar', email: process.env.INSIGHTS_USER, senha: process.env.INSIGHTS_PASS }); // conta mestra pelo formulário
   assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1', headers: { cookie: cookieDe(mestre) } })).d.eu.mestra, true);
+  // A conta mestra não é de uso único: dá para entrar de novo e as sessões são independentes. Trocou a senha na Vercel: todas caem.
+  const mestre2 = await acessar({ acao: 'entrar', email: process.env.INSIGHTS_USER, senha: process.env.INSIGHTS_PASS });
+  assert.equal(mestre2.c, 200);
+  await acessar({ acao: 'sair' }, { cookie: cookieDe(mestre2) });
+  assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1', headers: { cookie: cookieDe(mestre) } })).c, 200); // sair de uma sessão não derruba a outra
+  const senhaMestra = process.env.INSIGHTS_PASS;
+  process.env.INSIGHTS_PASS = 'senha-nova-na-vercel';
+  assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1', headers: { cookie: cookieDe(mestre) } })).c, 401);
+  assert.equal((await acessar({ acao: 'entrar', email: process.env.INSIGHTS_USER, senha: senhaMestra })).c, 401); // a senha antiga também não entra mais
+  process.env.INSIGHTS_PASS = senhaMestra;
 
   // Salvar: renomear, esconder, reordenar, novo bloco em carrossel, card com imagem própria, design.
   const novo = clone();
