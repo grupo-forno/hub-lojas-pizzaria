@@ -140,6 +140,36 @@ const chamar = (h, req) => new Promise(ok => {
   const devolvida = await chamar(imagem, { method: 'GET', url: enviada.d.url });
   assert.ok(Buffer.compare(devolvida.d, png) === 0, 'a imagem devolvida mudou');
   const foto = enviada.d.url;
+  assert.equal(devolvida.h['Accept-Ranges'], 'bytes');
+  // Em pedaços (Range): o iPhone só toca vídeo se o servidor responder assim.
+  const pedaco = (range) => chamar(imagem, { method: 'GET', url: foto, headers: { range } });
+  const p1 = await pedaco('bytes=0-3');
+  assert.equal(p1.c, 206);
+  assert.equal(p1.h['Content-Range'], `bytes 0-3/${png.length}`);
+  assert.ok(Buffer.compare(p1.d, png.subarray(0, 4)) === 0);
+  const p2 = await pedaco('bytes=-4'); // os últimos 4 bytes
+  assert.ok(p2.c === 206 && Buffer.compare(p2.d, png.subarray(png.length - 4)) === 0);
+  const p3 = await pedaco(`bytes=10-`); // do byte 10 até o fim
+  assert.ok(p3.c === 206 && Buffer.compare(p3.d, png.subarray(10)) === 0);
+  assert.equal((await pedaco('bytes=99999-')).c, 416); // além do fim
+  assert.equal((await pedaco('lixo')).c, 416);
+  // Vídeo do topo: MP4 e WebM de verdade (pelos primeiros bytes), até ~3 MB; o resto é recusado.
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(40)]);
+  const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(40)]);
+  const subir = (tipo, dados) => chamar(imagem, { headers: NOSSA_TELA, body: { tipo, dados: dados.toString('base64') } });
+  const videoMp4 = await subir('video/mp4', mp4);
+  assert.equal(videoMp4.c, 200, videoMp4.d?.erro);
+  assert.equal((await subir('video/webm', webm)).c, 200);
+  assert.equal((await subir('video/mp4', Buffer.alloc(50))).c, 400); // diz que é MP4 mas não é
+  assert.equal((await subir('video/webm', mp4)).c, 400);
+  assert.equal((await subir('image/png', mp4)).c, 400); // vídeo disfarçado de imagem
+  assert.equal((await subir('video/x-msvideo', mp4)).c, 400); // formato que não aceitamos
+  const grande = Buffer.concat([mp4, Buffer.alloc(3_200_000)]);
+  const demais = await subir('video/mp4', grande);
+  assert.equal(demais.c, 413);
+  assert.ok(demais.d.erro.includes('3 MB'));
+  const lido = await chamar(imagem, { method: 'GET', url: videoMp4.d.url });
+  assert.equal(lido.h['Content-Type'], 'video/mp4');
 
   // Admin: login, proteção contra site de fora, validação.
   const entrada = await chamar(admin, { method: 'GET', url: '/admin' }); // sem sessão: a página é a tela de entrada
@@ -358,6 +388,49 @@ const chamar = (h, req) => new Promise(ok => {
   assert.ok(/Max-Age=0/.test(saida.h['Set-Cookie']));
   assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1', headers: comoCookie(cookieDe(trocou)) })).c, 401);
   assert.equal((await query('select count(*)::int n from sessoes where usuario_id = $1', [idBruno])).rows[0].n, 0);
+
+  // ---- Fundo do topo: foto única, vídeo ou carrossel automático; tamanho da logo ----
+  {
+    const urlVideo = videoMp4.d.url;
+    const base = clone();
+    const tenta = async (mudar, porque) => { const r = JSON.parse(JSON.stringify(base)); mudar(r.config); assert.equal((await post(r)).c, 400, porque); };
+    await tenta(c => { c.capa_tipo = 'filme'; }, 'tipo desconhecido');
+    await tenta(c => { c.capa_tipo = 'video'; c.capa_video = ''; }, 'vídeo escolhido sem vídeo');
+    await tenta(c => { c.capa_video = 'http://exemplo.com/a.mp4'; }, 'vídeo sem https');
+    await tenta(c => { c.capa_video = 'https://exemplo.com/a.mov'; }, 'formato de vídeo');
+    await tenta(c => { c.capa_video = 'javascript:alert(1)'; }, 'vídeo perigoso');
+    await tenta(c => { c.capa_tipo = 'carrossel'; c.capa_fotos = [foto]; }, 'carrossel com 1 foto');
+    await tenta(c => { c.capa_fotos = Array(9).fill(foto); }, 'fotos demais');
+    await tenta(c => { c.capa_fotos = ['javascript:alert(1)']; }, 'foto perigosa');
+    await tenta(c => { c.capa_intervalo = '2'; }, 'tempo curto demais');
+    await tenta(c => { c.capa_intervalo = '99'; }, 'tempo longo demais');
+    await tenta(c => { c.logo_tamanho = '500'; }, 'logo grande demais');
+    await tenta(c => { c.logo_tamanho = '10'; }, 'logo pequena demais');
+    await tenta(c => { c.logo_tamanho = 'grande'; }, 'logo fora do formato');
+
+    const comVideo = JSON.parse(JSON.stringify(base));
+    Object.assign(comVideo.config, { capa_tipo: 'video', capa_video: urlVideo, logo_tamanho: '240' });
+    const v1 = await post(comVideo);
+    assert.equal(v1.c, 200, v1.d?.erro);
+    assert.deepEqual([v1.d.config.capa_tipo, v1.d.config.capa_video, v1.d.config.logo_tamanho], ['video', urlVideo, '240']);
+    const comLink = JSON.parse(JSON.stringify(comVideo));
+    comLink.config.capa_video = 'https://cdn.exemplo.com/topo.webm?v=3'; // também aceita um link direto
+    assert.equal((await post(comLink)).c, 200);
+
+    const carrossel = JSON.parse(JSON.stringify(base));
+    Object.assign(carrossel.config, { capa_tipo: 'carrossel', capa_fotos: [foto, foto, foto], capa_intervalo: '6' });
+    const v2 = await post(carrossel);
+    assert.equal(v2.c, 200, v2.d?.erro);
+    assert.deepEqual(JSON.parse(v2.d.config.capa_fotos), [foto, foto, foto]);
+    const pub = (await chamar(pagina, { method: 'GET', url: '/api/pagina' })).d.config;
+    assert.deepEqual([pub.capa_tipo, pub.capa_intervalo, JSON.parse(pub.capa_fotos).length], ['carrossel', '6', 3]);
+    const h2 = (await chamar(admin, { method: 'GET', url: '/api/admin?historico=1', headers: login })).d[0].mudancas.join(' | ');
+    assert.ok(h2.includes('Mudou o fundo do topo para carrossel de fotos'), h2);
+    assert.ok(h2.includes('Alterou as fotos do carrossel do topo'), h2);
+    const antes = (await chamar(admin, { method: 'GET', url: '/api/admin?historico=1', headers: login })).d.length;
+    assert.equal((await post(carrossel)).c, 200); // salvar igual não gera registro
+    assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?historico=1', headers: login })).d.length, antes);
+  }
 
   // Volta ao original (mesmos ids; o bloco novo some).
   const volta = clone();

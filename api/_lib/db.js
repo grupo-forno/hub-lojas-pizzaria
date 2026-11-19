@@ -82,6 +82,7 @@ const CONFIG_PADRAO = {
   titulo: 'Escolha sua unidade', capa: 'capa.jpg', logo: 'logo-branca.png',
   cor: '#581512', cor_topo: '#FFFFFF', cor_bloco: '#FFFFFF', cor_texto: '#581512',
   fonte: 'Actor', estilo: 'oval', sombra: '0', contorno: '0',
+  capa_tipo: 'foto', capa_video: '', capa_fotos: '[]', capa_intervalo: '5', logo_tamanho: '190',
   redes: JSON.stringify([{ rede: 'instagram', url: 'https://instagram.com/fornopaulista', ativo: true }]),
   rodape: 'Não usamos cookies nem coletamos dados pessoais. Contamos só os cliques por unidade.',
 };

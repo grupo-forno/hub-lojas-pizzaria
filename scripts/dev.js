@@ -48,7 +48,11 @@ const admin = require('../api/admin.js');
 const rotas = { '/api/pagina': require('../api/pagina.js'), '/api/evento': require('../api/evento.js'), '/api/admin': admin, '/admin': admin, '/api/imagem': require('../api/imagem.js'), '/api/acesso': require('../api/acesso.js') };
 const tipos = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.css': 'text/css' };
 
-http.createServer((req, res) => {
+// ATRASO_MS=3000 npm run dev: as imagens e vídeos demoram esse tempo para chegar (simula celular com internet lenta; bom para ver a abertura).
+const ATRASO = Math.min(Number(process.env.ATRASO_MS) || 0, 20000);
+const eMidia = p => p === '/api/imagem' || /\.(jpe?g|png|webp|mp4|webm)$/i.test(p);
+
+const servir = (req, res) => {
   const u = new URL(req.url, 'http://x');
   const h = rotas[u.pathname];
   if (h) {
@@ -70,7 +74,9 @@ http.createServer((req, res) => {
     res.setHeader('content-type', tipos[path.extname(f)] || 'application/octet-stream');
     res.end(d);
   });
-}).listen(PORTA, () => console.log(`\nAbra: http://localhost:${PORTA}/?utm_source=instagram&utm_medium=bio\nGestão: http://localhost:${PORTA}/admin  (na tela de entrada, conta mestra: usuário ${process.env.INSIGHTS_USER} / senha ${process.env.INSIGHTS_PASS}; os e-mails de convite aparecem neste terminal)\nCtrl+C para parar.`));
+};
+http.createServer((req, res) => (ATRASO && eMidia(new URL(req.url, 'http://x').pathname) ? setTimeout(servir, ATRASO, req, res) : servir(req, res))).listen(PORTA, () => console.log(`\nAbra: http://localhost:${PORTA}/?utm_source=instagram&utm_medium=bio\nGestão: http://localhost:${PORTA}/admin  (na tela de entrada, conta mestra: usuário ${process.env.INSIGHTS_USER} / senha ${process.env.INSIGHTS_PASS}; os e-mails de convite aparecem neste terminal)\nCtrl+C para parar.${ATRASO ? `
+Conexão lenta simulada: imagens e vídeos demoram ${ATRASO} ms.` : ''}`));
 
 const sair = () => { docker('stop', 'pf-teste'); process.exit(); };
 process.on('SIGINT', sair); // Ctrl+C: desliga o banco também

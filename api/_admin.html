@@ -234,6 +234,19 @@
   details.numeros { margin-top: 10px; font-size: .85rem; }
   details.numeros summary { cursor: pointer; color: var(--mudo); }
 
+  /* Fundo do topo (foto, vídeo ou carrossel) e tamanho da logo */
+  .fundo-tipo { margin: 4px 0 14px; }
+  .fotos-capa { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; margin: 8px 0 12px; }
+  .foto-capa { position: relative; border: 1px solid var(--borda); border-radius: 10px; overflow: hidden; background: #581512; }
+  .foto-capa img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; }
+  .foto-capa .ctrl { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; padding: 4px; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+  .foto-capa .ctrl button { width: 28px; height: 28px; border: 0; border-radius: 6px; background: rgba(255,255,255,.92); display: grid; place-items: center; padding: 0; }
+  .foto-capa .ordem { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: .72rem; border-radius: 99px; padding: 0 8px; }
+  video.miniatura { object-fit: cover; }
+  .deslizante { display: flex; align-items: center; gap: 12px; }
+  .deslizante input[type=range] { flex: 1; height: 28px; accent-color: #1C1C1C; }
+  .deslizante output { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+
   /* Quem está logado (rodapé do menu) */
   .eu { margin-top: auto; border-top: 1px solid var(--borda); padding: 14px 6px 0; display: grid; gap: 2px; }
   .eu b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -355,7 +368,7 @@
   window.fetch = async (...a) => { const r = await _fetch(...a); if (r.status === 401) location.reload(); return r; };
   const el = (tag, props = {}, ...filhos) => { const e = Object.assign(document.createElement(tag), props); e.append(...filhos.flat(Infinity).filter(x => x != null && x !== false)); return e; };
   const html = (tag, props, codigo) => { const e = el(tag, props); e.innerHTML = codigo; return e; }; // só com ícones fixos acima, nunca com dados
-  const PADRAO = { cor: '#581512', cor_topo: '#FFFFFF', cor_bloco: '#FFFFFF', cor_texto: '#581512', fonte: 'Actor', estilo: 'oval', sombra: '0', contorno: '0' };
+  const PADRAO = { cor: '#581512', cor_topo: '#FFFFFF', cor_bloco: '#FFFFFF', cor_texto: '#581512', fonte: 'Actor', estilo: 'oval', sombra: '0', contorno: '0', capa_tipo: 'foto', capa_intervalo: '5', logo_tamanho: '190' };
   const FONTES = ['Actor', 'Inter', 'Poppins', 'Montserrat', 'Nunito', 'Roboto', 'Lora', 'Playfair Display'];
   const NOME_ACAO = { pedido: 'Faça Seu Pedido', whatsapp: 'WhatsApp', mapa: 'Localização', link: '' };
   const PADRAO_OPCOES = { layout: 'classico', visibilidade: 'aberto', tamanho: 'p', alinhamento: 'centro', posicao_imagem: 'esquerda', tamanho_texto: 'g', contorno: false, sombra: false, miniatura: '' };
@@ -382,7 +395,7 @@
   // A prévia mostra o rascunho como o público veria: só o que está visível.
   function dadosPrevia() {
     const visivel = l => l.ativo !== false;
-    return { config: { ...estado.config, redes: JSON.stringify(estado.config.redes) }, links: estado.links.filter(visivel).map(l => ({ ...l, filhos: l.filhos.filter(visivel) })) };
+    return { config: { ...estado.config, redes: JSON.stringify(estado.config.redes), capa_fotos: JSON.stringify(estado.config.capa_fotos || []) }, links: estado.links.filter(visivel).map(l => ({ ...l, filhos: l.filhos.filter(visivel) })) };
   }
   function enviarPrevia() {
     if (!estado) return;
@@ -509,6 +522,102 @@
         el('button', { type: 'button', className: 'secundario', textContent: 'Trocar imagem', onclick: () => escolherArquivo(max, usar) }),
         el('button', { type: 'button', className: 'secundario', textContent: 'Voltar ao padrão', onclick: () => usar(padrao) })),
       ajuda && el('p', { className: 'ajuda', textContent: ajuda }));
+  }
+
+  // Vídeo curto do topo: vai como está (não dá para recomprimir no navegador), então a gente confere tamanho e se abre.
+  const MAX_VIDEO = 3_100_000;
+  async function enviarVideo(arquivo) {
+    const tipo = arquivo.type || (/\.webm$/i.test(arquivo.name) ? 'video/webm' : /\.mp4$/i.test(arquivo.name) ? 'video/mp4' : '');
+    if (!['video/mp4', 'video/webm'].includes(tipo)) throw new Error('Use um vídeo MP4 ou WebM.');
+    if (arquivo.size > MAX_VIDEO) throw new Error(`Esse vídeo tem ${(arquivo.size / 1048576).toFixed(1)} MB e o máximo aqui é 3 MB. Comprima o vídeo (720p, de 5 a 10 segundos, sem som) ou cole o link de um arquivo hospedado em outro lugar.`);
+    aviso('Conferindo o vídeo…');
+    await new Promise((ok, falha) => {
+      const v = document.createElement('video');
+      const url = URL.createObjectURL(arquivo);
+      const fim = () => URL.revokeObjectURL(url);
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => { fim(); ok(); };
+      v.onerror = () => { fim(); falha(new Error('Não consegui abrir este vídeo. Use MP4 (H.264) ou WebM.')); };
+      v.src = url;
+    });
+    aviso('Enviando vídeo…');
+    const dados = await new Promise(r => { const f = new FileReader(); f.onload = () => r(String(f.result).split(',')[1]); f.readAsDataURL(arquivo); });
+    const r = await fetch('/api/imagem', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'admin' }, body: JSON.stringify({ tipo, dados }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erro || 'Não foi possível enviar o vídeo.');
+    return d.url;
+  }
+  function escolherVideo(pronto) {
+    const i = el('input', { type: 'file', accept: 'video/mp4,video/webm,.mp4,.webm' });
+    i.onchange = async () => { if (i.files[0]) { try { pronto(await enviarVideo(i.files[0])); } catch (e) { aviso(e.message, true); } } };
+    i.click();
+  }
+  // Várias fotos de uma vez (carrossel do topo): envia uma a uma, na ordem escolhida.
+  function escolherVarias(max, restantes, pronto) {
+    const i = el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', multiple: true });
+    i.onchange = async () => {
+      const arquivos = [...i.files].slice(0, restantes);
+      try {
+        for (const [n, a] of arquivos.entries()) { aviso(`Enviando foto ${n + 1} de ${arquivos.length}…`); pronto(await enviarImagem(a, max)); }
+        aviso(i.files.length > restantes ? `Foram enviadas ${arquivos.length} fotos (o limite é ${MAX_FOTOS_CAPA}).` : 'Fotos enviadas.');
+      } catch (e) { aviso(e instanceof DOMException ? 'Não foi possível abrir uma das imagens. Use JPG, PNG ou WebP.' : e.message, true); }
+    };
+    i.click();
+  }
+  const MAX_FOTOS_CAPA = 8;
+
+  // Fundo do topo: foto única, vídeo ou carrossel automático (o administrador escolhe uma das três).
+  function secaoFundo() {
+    const c = estado.config;
+    const tipo = ['foto', 'video', 'carrossel'].includes(c.capa_tipo) ? c.capa_tipo : 'foto';
+    const seletor = el('div', { className: 'filtros fundo-tipo', role: 'group', ariaLabel: 'Tipo de fundo do topo' },
+      [['foto', 'Foto'], ['video', 'Vídeo'], ['carrossel', 'Carrossel de fotos']].map(([k, t]) =>
+        el('button', { type: 'button', textContent: t, ariaPressed: String(tipo === k), onclick: () => { c.capa_tipo = k; marcar(); desenhar(); } })));
+    const fotoUnica = (rotulo, ajuda) => campoImagem(rotulo, c, 'capa', { max: 2000, padrao: 'capa.jpg', ajuda });
+    let conteudo;
+    if (tipo === 'foto') {
+      conteudo = [fotoUnica('Foto de fundo', 'Foto do topo (no computador ela também aparece desfocada no fundo).')];
+    } else if (tipo === 'video') {
+      const visual = c.capa_video ? el('video', { className: 'miniatura', src: c.capa_video, muted: true, loop: true, autoplay: true, playsInline: true, ariaLabel: 'Vídeo do topo' }) : el('div', { className: 'miniatura', style: 'display:grid;place-items:center;color:#fff;font-size:.8rem', textContent: 'Sem vídeo' });
+      if (c.capa_video) { visual.muted = true; visual.setAttribute('muted', ''); }
+      conteudo = [
+        el('div', { className: 'campo' }, el('span', { className: 'rot', textContent: 'Vídeo do topo' }),
+          el('div', { className: 'linha-img' }, visual,
+            el('button', { type: 'button', className: 'secundario', textContent: 'Enviar vídeo', onclick: () => escolherVideo(u => { c.capa_video = u; marcar(); desenhar(); }) }),
+            c.capa_video && el('button', { type: 'button', className: 'secundario', textContent: 'Remover vídeo', onclick: () => { c.capa_video = ''; marcar(); desenhar(); } })),
+          el('p', { className: 'ajuda', textContent: 'MP4 ou WebM, curto (5 a 10 segundos), sem som e até 3 MB. Ele toca sozinho, em repetição, sem som.' })),
+        campo('Ou cole o link de um vídeo', c, 'capa_video', { tipo: 'url', dica: 'https://.../video.mp4', ajuda: 'Para vídeos maiores: hospede em outro lugar e cole o endereço direto do arquivo (termina em .mp4 ou .webm).' }),
+        fotoUnica('Foto de capa', 'Aparece enquanto o vídeo carrega, e no lugar dele se o aparelho não puder tocar vídeo (economia de dados ou animações desligadas).'),
+      ];
+    } else {
+      const fotos = c.capa_fotos;
+      const mover = (i, d) => { const j = i + d; if (j < 0 || j >= fotos.length) return; [fotos[i], fotos[j]] = [fotos[j], fotos[i]]; marcar(); desenhar(); };
+      const botao = (icone, rot, f, extra = '') => html('button', { type: 'button', title: rot, ariaLabel: rot, onclick: f, className: extra }, svg(icone, 15));
+      const intervalo = el('select', { ariaLabel: 'Segundos por foto' }, [3, 4, 5, 6, 8, 10, 15].map(n => el('option', { value: String(n), textContent: `${n} segundos por foto`, selected: String(c.capa_intervalo) === String(n) })));
+      intervalo.addEventListener('change', () => { c.capa_intervalo = intervalo.value; marcar(); });
+      conteudo = [
+        el('span', { className: 'rot', textContent: `Fotos do carrossel (${fotos.length} de ${MAX_FOTOS_CAPA})` }),
+        el('div', { className: 'fotos-capa' }, fotos.map((u, i) => el('div', { className: 'foto-capa' },
+          el('img', { src: u, alt: `Foto ${i + 1}` }), el('span', { className: 'ordem', textContent: String(i + 1) }),
+          el('div', { className: 'ctrl' }, botao('voltar', 'Mover para antes', () => mover(i, -1)), botao('lixo', 'Remover foto', () => { fotos.splice(i, 1); marcar(); desenhar(); }), html('button', { type: 'button', title: 'Mover para depois', ariaLabel: 'Mover para depois', onclick: () => mover(i, 1), style: 'transform:rotate(180deg)' }, svg('voltar', 15)))))),
+        fotos.length < MAX_FOTOS_CAPA && el('button', { type: 'button', className: 'preto', textContent: '+ Adicionar fotos', style: 'margin-bottom:12px', onclick: () => escolherVarias(2000, MAX_FOTOS_CAPA - fotos.length, u => { fotos.push(u); marcar(); desenhar(); }) }),
+        el('div', { className: 'campo' }, el('label', {}, 'Tempo de cada foto', intervalo)),
+        el('p', { className: 'ajuda', textContent: 'As fotos passam sozinhas, com transição suave. Mínimo de 2 fotos, máximo de 8. A primeira aparece já na abertura e as outras carregam em seguida, então nunca aparece foto pela metade.' }),
+      ];
+    }
+    return el('div', {}, el('span', { className: 'rot', textContent: 'Fundo do topo' }), seletor, conteudo);
+  }
+
+  // Tamanho da logo: o celular mostra a mudança na hora.
+  function tamanhoLogo() {
+    const c = estado.config;
+    const valor = /^\d+$/.test(c.logo_tamanho || '') ? c.logo_tamanho : '190';
+    const saida = el('output', { textContent: `${valor} px` });
+    const deslizar = el('input', { type: 'range', min: 60, max: 360, step: 10, value: valor, ariaLabel: 'Tamanho da logo' });
+    deslizar.addEventListener('input', () => { c.logo_tamanho = deslizar.value; saida.textContent = `${deslizar.value} px`; marcar(); });
+    return el('div', { className: 'campo' }, el('span', { className: 'rot', textContent: 'Tamanho da logo' }),
+      el('div', { className: 'deslizante' }, deslizar, saida,
+        el('button', { type: 'button', className: 'secundario', textContent: 'Padrão', onclick: () => { c.logo_tamanho = '190'; deslizar.value = '190'; saida.textContent = '190 px'; marcar(); } })));
   }
 
   // Ícone dentro do botão: biblioteca, imagem própria ou nenhum. Sem escolha, vale o padrão da ação.
@@ -768,8 +877,9 @@
       el('h2', { textContent: 'Perfil' }),
       el('div', { className: 'cartao' },
         el('div', { className: 'perfil' }, foto, el('div', {}, el('b', { textContent: 'Cabeçalho' }), el('p', { className: 'ajuda', textContent: 'Foto de capa, logo e Instagram que aparecem no topo.' }))),
-        campoImagem('Foto de fundo', c, 'capa', { max: 2000, padrao: 'capa.jpg', ajuda: 'Foto do topo (no computador ela também aparece desfocada no fundo).' }),
+        secaoFundo(),
         campoImagem('Logo', c, 'logo', { max: 1200, padrao: 'logo-branca.png', ajuda: 'Use PNG com fundo transparente.' }),
+        tamanhoLogo(),
         campo('Texto do rodapé', c, 'rodape'),
         campo('Título da página (lido por leitores de tela)', c, 'titulo')),
       el('h2', { textContent: 'Ícones sociais' }),
@@ -1064,6 +1174,8 @@
     const c = d.config;
     try { c.redes = JSON.parse(c.redes || 'null'); } catch { c.redes = null; }
     if (!Array.isArray(c.redes)) c.redes = c.instagram ? [{ rede: 'instagram', url: c.instagram, ativo: true }] : []; // páginas antigas
+    try { c.capa_fotos = JSON.parse(c.capa_fotos || '[]'); } catch { c.capa_fotos = []; }
+    if (!Array.isArray(c.capa_fotos)) c.capa_fotos = [];
     for (const l of d.links) {
       l.opcoes = { ...PADRAO_OPCOES, ...(l.opcoes || {}) };
       for (const f of l.filhos) f.opcoes ||= {};

@@ -8,7 +8,10 @@ const usuarios = require('./_lib/usuarios.js');
 const { ICONES, REDES } = require('../icones.js');
 const { resultados } = require('./_lib/resultados.js');
 
-const CAMPOS = ['titulo', 'rodape', 'cor', 'cor_topo', 'cor_bloco', 'cor_texto', 'fonte', 'estilo', 'sombra', 'contorno', 'capa', 'logo', 'instagram'];
+const CAMPOS = ['titulo', 'rodape', 'cor', 'cor_topo', 'cor_bloco', 'cor_texto', 'fonte', 'estilo', 'sombra', 'contorno', 'capa', 'logo', 'instagram',
+  'capa_tipo', 'capa_video', 'capa_fotos', 'capa_intervalo', 'logo_tamanho']; // fundo do topo (foto, vídeo ou carrossel) e tamanho da logo
+const TIPOS_CAPA = ['foto', 'video', 'carrossel'];
+const MAX_FOTOS = 8;
 const CORES = { cor: 'Fundo da página', cor_topo: 'Texto e ícones do cabeçalho', cor_bloco: 'Fundo do bloco', cor_texto: 'Texto do bloco' };
 const FONTES = ['Actor', 'Inter', 'Poppins', 'Montserrat', 'Nunito', 'Roboto', 'Lora', 'Playfair Display']; // mesma lista da tela
 const ESTILOS = ['oval', 'arredondado', 'quadrado', 'largo'];
@@ -32,6 +35,8 @@ const txt = (s, max) => (typeof s === 'string' ? s.trim().slice(0, max) : '');
 const urlOk = s => s === '' || /^https?:\/\//i.test(s);
 // Imagem enviada pelo admin, endereço na internet ou arquivo do projeto (capa.jpg).
 const IMAGEM = /^(\/api\/imagem\?id=\d+|https?:\/\/\S+|[\w-]+\.(jpe?g|png|webp))$/i;
+// Vídeo do topo: enviado pelo admin ou um link direto para um arquivo .mp4/.webm.
+const VIDEO = /^(\/api\/imagem\?id=\d+|https:\/\/[^\s?#]+\.(mp4|webm)(\?\S*)?)$/i;
 // Ícone/imagem do link: um da biblioteca (i:whatsapp), uma imagem, ou "nenhum".
 const iconeOk = s => s === '' || s === 'nenhum' || (s.startsWith('i:') ? Object.hasOwn(ICONES, s.slice(2)) : IMAGEM.test(s));
 
@@ -73,6 +78,20 @@ function validar(b) {
   for (const k of ['sombra', 'contorno']) config[k] = config[k] === '1' ? '1' : '0';
   if (!urlOk(config.instagram)) erros.push('O link do Instagram precisa começar com https://');
   for (const k of ['capa', 'logo']) if (config[k] && !IMAGEM.test(config[k])) erros.push(`Imagem inválida em "${k}".`);
+
+  // Fundo do topo: foto única, vídeo ou carrossel automático de fotos.
+  if (config.capa_tipo && !TIPOS_CAPA.includes(config.capa_tipo)) erros.push('Tipo de fundo do topo inválido.');
+  if (config.capa_video && !VIDEO.test(config.capa_video)) erros.push('O vídeo do topo precisa ser um arquivo enviado aqui ou um link https para um .mp4 ou .webm.');
+  let fotos = b?.config?.capa_fotos;
+  if (typeof fotos === 'string') { try { fotos = JSON.parse(fotos); } catch { fotos = []; } }
+  fotos = (Array.isArray(fotos) ? fotos : []).map(f => txt(f, 300)).filter(Boolean);
+  if (fotos.length > MAX_FOTOS) erros.push(`O carrossel do topo aceita até ${MAX_FOTOS} fotos.`);
+  for (const f of fotos) if (!IMAGEM.test(f)) erros.push('Uma das fotos do carrossel do topo é inválida.');
+  config.capa_fotos = JSON.stringify(fotos);
+  if (config.capa_tipo === 'video' && !config.capa_video) erros.push('Escolha o vídeo do topo (ou volte para foto).');
+  if (config.capa_tipo === 'carrossel' && fotos.length < 2) erros.push('O carrossel do topo precisa de pelo menos 2 fotos.');
+  if (config.capa_intervalo && !(/^\d+$/.test(config.capa_intervalo) && config.capa_intervalo >= 3 && config.capa_intervalo <= 15)) erros.push('O tempo de cada foto do carrossel vai de 3 a 15 segundos.');
+  if (config.logo_tamanho && !(/^\d+$/.test(config.logo_tamanho) && config.logo_tamanho >= 60 && config.logo_tamanho <= 360)) erros.push('O tamanho da logo vai de 60 a 360.');
 
   // Ícones sociais do topo: lista guardada como JSON.
   let redes = b?.config?.redes;
@@ -121,6 +140,7 @@ const NOME_CONFIG = {
   titulo: 'o título da página', rodape: 'o rodapé', cor: 'a cor de fundo da página', cor_topo: 'a cor do cabeçalho',
   cor_bloco: 'a cor de fundo dos blocos', cor_texto: 'a cor do texto dos blocos', fonte: 'a fonte', estilo: 'o estilo dos blocos',
   sombra: 'a sombra dos blocos', contorno: 'o contorno dos blocos', capa: 'a foto de fundo', logo: 'a logo', redes: 'os ícones sociais',
+  capa_tipo: 'o tipo de fundo do topo', capa_video: 'o vídeo do topo', capa_fotos: 'as fotos do carrossel do topo', capa_intervalo: 'o tempo de cada foto do topo', logo_tamanho: 'o tamanho da logo',
 };
 const comparavel = o => JSON.stringify(Object.keys(PADRAO_OPCOES).map(k => o?.[k] ?? PADRAO_OPCOES[k]));
 const nomeBloco = l => l.nome || l.titulo;
@@ -131,7 +151,8 @@ function descrever(antes, novo) {
     const b = novo.config[k] ?? '';
     if (a === b) continue;
     if (k === 'sombra' || k === 'contorno') m.push(`${b === '1' ? 'Ligou' : 'Desligou'} ${nome}`);
-    else if (['capa', 'logo', 'redes'].includes(k) || !a) m.push(`Alterou ${nome}`);
+    else if (['capa', 'logo', 'redes', 'capa_video', 'capa_fotos'].includes(k) || !a) m.push(`Alterou ${nome}`);
+    else if (k === 'capa_tipo') m.push(`Mudou o fundo do topo para ${{ foto: 'foto', video: 'vídeo', carrossel: 'carrossel de fotos' }[b] || b}`);
     else m.push(`Alterou ${nome}: ${a} → ${b}`);
   }
   const plano = lista => lista.flatMap(l => [{ ...l, onde: nomeBloco(l) }, ...l.filhos.map(f => ({ ...f, onde: `${nomeBloco(l)} › ${f.titulo || 'imagem'}` }))]);
