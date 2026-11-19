@@ -38,6 +38,56 @@ const chamar = (h, req) => new Promise(ok => {
   acesso = require('./api/acesso.js');
   ({ caixaDeTestes } = require('./api/_lib/email.js'));
 
+  // Migração: um banco no formato da PRIMEIRA versão (o que está em produção hoje) vira blocos, sem perder ids nem cliques.
+  {
+    const { ESQUEMA, migrarLegado, arvore } = require('./api/_lib/db.js');
+    const g = new Client(`${SERVIDOR}/postgres`);
+    await g.connect();
+    await g.query('drop database if exists pedeforno_legado with (force)');
+    await g.query('create database pedeforno_legado');
+    await g.end();
+    const v1 = new Client(`${SERVIDOR}/pedeforno_legado`);
+    await v1.connect();
+    await v1.query(`
+      create table config (chave text primary key, valor text not null);
+      create table links (id serial primary key, pai int references links(id) on delete cascade,
+        tipo text not null check (tipo in ('unidade', 'acao', 'link', 'card')), acao text, titulo text not null, subtitulo text, url text,
+        loja text, utm boolean not null default false, ordem int not null default 0, ativo boolean not null default true);
+      create table eventos (id bigserial primary key, ts timestamptz not null default now(), tipo text not null, link_id int, loja text, acao text, origem text, meio text, campanha text);
+      insert into links (pai, tipo, acao, titulo, subtitulo, url, loja, utm, ordem) values
+        (null, 'unidade', null, 'Unidade Hugo Napoleão', 'Rua Hugo Napoleão, 1778, Fátima', null, 'fornopaulistaleste', false, 0),
+        (1, 'acao', 'pedido', 'Faça seu pedido', null, 'https://fornopaulista.tuigoapp.com.br/fornopaulistaleste/pedidos', 'fornopaulistaleste', true, 0),
+        (1, 'acao', 'whatsapp', 'WhatsApp', null, 'https://wa.me/5586995709028', 'fornopaulistaleste', false, 1),
+        (null, 'card', null, 'Marque seu evento', null, 'https://wa.me/558698194974', null, false, 1),
+        (null, 'card', null, 'Cardápio on-line', 'Combos e promoções da Forno Paulista.', 'https://cardapio.grupofornopaulista.com/', null, true, 2);
+      insert into config values ('cor', '#86201B'), ('titulo', 'Escolha sua unidade'), ('instagram', 'https://instagram.com/fornopaulista');
+      insert into eventos (tipo, link_id, loja, acao, origem, meio) values ('click', 2, 'fornopaulistaleste', 'pedido', 'instagram', 'bio'), ('click', 5, null, null, 'hub', 'direto');`);
+    await v1.query(ESQUEMA); // o código novo cria as colunas que faltam (nome, opcoes, icone...) e solta a trava antiga de tipos
+    await migrarLegado(v1);
+    const blocos = arvore((await v1.query('select * from links order by ordem, id')).rows);
+    assert.deepEqual(blocos.map(b => [b.id, b.tipo, b.nome, b.opcoes.layout, b.opcoes.visibilidade]), [
+      [1, 'bloco', 'Hugo Napoleão', 'classico', 'recolhido'],
+      [4, 'bloco', 'Marque Seu Evento', 'classico', 'aberto'],
+      [5, 'bloco', 'CARDÁPIO ON-LINE', 'card', 'aberto'],
+    ]);
+    assert.equal(blocos[0].titulo, 'Unidade Hugo Napoleão'); // o texto do botão não muda
+    assert.deepEqual(blocos[0].filhos.map(f => [f.id, f.acao, f.titulo]), [[2, 'pedido', 'Faça Seu Pedido'], [3, 'whatsapp', 'WhatsApp']]); // os links da unidade mantêm os ids
+    assert.equal(blocos[0].filhos[0].utm, true);
+    const evento = blocos[1].filhos[0], cardapio = blocos[2].filhos[0];
+    assert.deepEqual([evento.acao, evento.titulo, evento.icone, evento.url], ['whatsapp', 'Marque Seu Evento', 'nenhum', 'https://wa.me/558698194974']);
+    assert.deepEqual([cardapio.acao, cardapio.titulo, cardapio.subtitulo, cardapio.utm, cardapio.url], ['link', 'CARDÁPIO ON-LINE', 'Combos e promoções da Forno Paulista.', true, 'https://cardapio.grupofornopaulista.com/']);
+    assert.equal(blocos[2].url, null); // a URL foi para dentro do link do bloco
+    assert.equal((await v1.query('select count(*)::int n from eventos where link_id in (2, 5)')).rows[0].n, 2); // o histórico de cliques continua lá
+    const cfg = Object.fromEntries((await v1.query('select chave, valor from config')).rows.map(r => [r.chave, r.valor]));
+    assert.equal(cfg.cor, '#581512'); // o vinho antigo virou o do Beacons
+    assert.deepEqual([cfg.fonte, cfg.estilo, cfg.cor_bloco], ['Actor', 'oval', '#FFFFFF']); // opções novas entram com o padrão
+    assert.deepEqual(JSON.parse(cfg.redes), [{ rede: 'instagram', url: 'https://instagram.com/fornopaulista', ativo: true }]); // o Instagram antigo vira o 1º ícone
+    const antes = (await v1.query('select count(*)::int n from links')).rows[0].n;
+    await migrarLegado(v1); // rodar de novo não muda nada
+    assert.equal((await v1.query('select count(*)::int n from links')).rows[0].n, antes);
+    await v1.end();
+  }
+
   // Página pública: 6 blocos como no Beacons (4 unidades recolhidas, evento, cardápio em card).
   const p = await chamar(pagina, { method: 'GET', url: '/api/pagina' });
   assert.equal(p.c, 200);

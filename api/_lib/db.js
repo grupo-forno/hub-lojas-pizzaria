@@ -77,15 +77,16 @@ const UNIDADES = [
 ];
 
 // Conteúdo inicial = a página do Beacons: cada item é um bloco de links com layout e visibilidade próprios.
+const CONFIG_PADRAO = {
+  titulo: 'Escolha sua unidade', capa: 'capa.jpg', logo: 'logo-branca.png',
+  cor: '#581512', cor_topo: '#FFFFFF', cor_bloco: '#FFFFFF', cor_texto: '#581512',
+  fonte: 'Actor', estilo: 'oval', sombra: '0', contorno: '0',
+  redes: JSON.stringify([{ rede: 'instagram', url: 'https://instagram.com/fornopaulista', ativo: true }]),
+  rodape: 'Não usamos cookies nem coletamos dados pessoais. Contamos só os cliques por unidade.',
+};
+
 async function semear(c) {
-  const config = {
-    titulo: 'Escolha sua unidade', capa: 'capa.jpg', logo: 'logo-branca.png',
-    cor: '#581512', cor_topo: '#FFFFFF', cor_bloco: '#FFFFFF', cor_texto: '#581512',
-    fonte: 'Actor', estilo: 'oval', sombra: '0', contorno: '0',
-    redes: JSON.stringify([{ rede: 'instagram', url: 'https://instagram.com/fornopaulista', ativo: true }]),
-    rodape: 'Não usamos cookies nem coletamos dados pessoais. Contamos só os cliques por unidade.',
-  };
-  for (const [k, v] of Object.entries(config)) await c.query('insert into config values ($1, $2)', [k, v]);
+  for (const [k, v] of Object.entries(CONFIG_PADRAO)) await c.query('insert into config values ($1, $2)', [k, v]);
   const novo = async (l, ordem) => (await c.query(
     'insert into links (pai, tipo, nome, acao, titulo, subtitulo, url, loja, utm, icone, opcoes, ordem) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id',
     [l.pai ?? null, l.tipo, l.nome ?? null, l.acao ?? null, l.titulo ?? '', l.subtitulo ?? null, l.url ?? null, l.loja ?? null, !!l.utm, l.icone ?? null, l.opcoes ?? null, ordem])).rows[0].id;
@@ -102,6 +103,35 @@ async function semear(c) {
   await novo({ pai: cardapio, tipo: 'acao', acao: 'link', titulo: 'CARDÁPIO ON-LINE', subtitulo: 'Combos e promoções da Forno Paulista.', url: 'https://cardapio.grupofornopaulista.com/', utm: true }, 0);
 }
 
+const tituloCase = s => s.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+
+// A primeira versão guardava "unidade", "card" e "link" soltos na página. Agora tudo é um bloco de links (como no Beacons).
+// Converte no lugar, mantendo os mesmos ids (o histórico de cliques continua apontando para o lugar certo). Pode rodar de novo sem efeito.
+async function migrarLegado(c) {
+  const velhos = (await c.query(`select id, tipo, titulo, subtitulo, url, utm from links where tipo in ('unidade', 'card', 'link') order by ordem, id`)).rows;
+  if (!velhos.length) return;
+  for (const v of velhos) {
+    if (v.tipo === 'unidade') { // as ações (pedido, WhatsApp, mapa) já eram filhas: só o bloco muda
+      await c.query(`update links set tipo = 'bloco', nome = regexp_replace(titulo, '^Unidade ', ''), opcoes = $2 where id = $1`,
+        [v.id, JSON.stringify({ layout: 'classico', visibilidade: 'recolhido' })]);
+      continue;
+    }
+    const card = v.tipo === 'card' && !!v.subtitulo; // card com texto de apoio (Cardápio) mantém o formato de card
+    const titulo = card ? v.titulo.toUpperCase() : tituloCase(v.titulo);
+    await c.query(`update links set tipo = 'bloco', nome = $2, titulo = '', subtitulo = null, url = null, utm = false, opcoes = $3 where id = $1`,
+      [v.id, titulo, JSON.stringify({ layout: card ? 'card' : 'classico', visibilidade: 'aberto', ...(card ? { tamanho_texto: 'g' } : {}) })]);
+    await c.query(`insert into links (pai, tipo, acao, titulo, subtitulo, url, utm, icone, ordem) values ($1, 'acao', $2, $3, $4, $5, $6, $7, 0)`,
+      [v.id, /wa\.me|whatsapp/i.test(v.url || '') ? 'whatsapp' : 'link', titulo, v.subtitulo, v.url, v.utm, card ? null : 'nenhum']);
+  }
+  await c.query(`update links set titulo = 'Faça Seu Pedido' where tipo = 'acao' and acao = 'pedido' and titulo = 'Faça seu pedido'`);
+  // Configurações novas (design, ícones sociais) entram com o padrão. O vinho do primeiro formato era o do conteúdo inicial
+  // (ninguém podia editar antes do admin), então vira o vinho do Beacons. O Instagram antigo vira o primeiro ícone social.
+  await c.query(`update config set valor = $1 where chave = 'cor' and valor = '#86201B'`, [CONFIG_PADRAO.cor]);
+  const insta = (await c.query(`select valor from config where chave = 'instagram'`)).rows[0]?.valor;
+  const padrao = { ...CONFIG_PADRAO, ...(insta ? { redes: JSON.stringify([{ rede: 'instagram', url: insta, ativo: true }]) } : {}) };
+  for (const [k, v] of Object.entries(padrao)) await c.query('insert into config (chave, valor) values ($1, $2) on conflict (chave) do nothing', [k, v]);
+}
+
 let pronto;
 // Roda uma vez por instância; se falhar, tenta de novo na próxima chamada.
 function preparar() {
@@ -110,6 +140,8 @@ function preparar() {
     try {
       await c.query('select pg_advisory_lock(7001)'); // duas instâncias frias não semeiam ao mesmo tempo
       await c.query(ESQUEMA);
+      await c.query('begin');
+      try { await migrarLegado(c); await c.query('commit'); } catch (e) { await c.query('rollback'); throw e; }
       if (!(await c.query('select 1 from links limit 1')).rowCount) {
         await c.query('begin'); // tudo ou nada: semear pela metade deixaria a página incompleta para sempre
         try { await semear(c); await c.query('commit'); } catch (e) { await c.query('rollback'); throw e; }
@@ -134,4 +166,4 @@ function arvore(linhas) {
   return todos.filter(l => !l.pai);
 }
 
-module.exports = { query, pool, arvore };
+module.exports = { query, pool, arvore, ESQUEMA, migrarLegado };
