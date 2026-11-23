@@ -24,8 +24,9 @@ const OPCOES = {
   alinhamento: ['centro', 'esquerda', 'direita'],
   posicao_imagem: ['esquerda', 'direita'],
   tamanho_texto: ['p', 'm', 'g', 'gg'],
+  pai_tamanho: ['compacto', 'destaque'], // card pai (cabeçalho do dropdown)
 };
-const PADRAO_OPCOES = { layout: 'classico', visibilidade: 'aberto', tamanho: 'p', alinhamento: 'centro', posicao_imagem: 'esquerda', tamanho_texto: 'g', contorno: false, sombra: false, miniatura: '' };
+const PADRAO_OPCOES = { layout: 'classico', visibilidade: 'aberto', tamanho: 'p', alinhamento: 'centro', posicao_imagem: 'esquerda', tamanho_texto: 'g', contorno: false, sombra: false, miniatura: '', pai_tamanho: 'compacto', pai_cor_bloco: '', pai_cor_texto: '' };
 
 // Personalização de cada link (ferramentas no rodapé do link): animação, agenda, etiqueta e cores.
 const ANIMACOES = ['', 'bounce', 'jello', 'wobble', 'pulse', 'shake', 'tada'];
@@ -53,6 +54,7 @@ function opcoes(o, erros, onde) {
   for (const [k, validos] of Object.entries(OPCOES)) if (o?.[k] != null) { if (validos.includes(o[k])) r[k] = o[k]; else erros.push(`${onde}: opção "${k}" inválida.`); }
   r.contorno = o?.contorno === true;
   r.sombra = o?.sombra === true;
+  for (const k of ['pai_cor_bloco', 'pai_cor_texto']) { r[k] = txt(o?.[k], 7); if (r[k] && !/^#[0-9a-f]{6}$/i.test(r[k])) erros.push(`${onde}: cor do card pai inválida.`); }
   r.miniatura = txt(o?.miniatura, 200);
   if (r.miniatura && !IMAGEM.test(r.miniatura)) erros.push(`${onde}: imagem do botão inválida.`);
   return r;

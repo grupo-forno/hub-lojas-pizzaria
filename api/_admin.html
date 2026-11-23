@@ -371,7 +371,7 @@
   const PADRAO = { cor: '#581512', cor_topo: '#FFFFFF', cor_bloco: '#FFFFFF', cor_texto: '#581512', fonte: 'Actor', estilo: 'oval', sombra: '0', contorno: '0', capa_tipo: 'foto', capa_intervalo: '5', logo_tamanho: '190' };
   const FONTES = ['Actor', 'Inter', 'Poppins', 'Montserrat', 'Nunito', 'Roboto', 'Lora', 'Playfair Display'];
   const NOME_ACAO = { pedido: 'Faça Seu Pedido', whatsapp: 'WhatsApp', mapa: 'Localização', link: '' };
-  const PADRAO_OPCOES = { layout: 'classico', visibilidade: 'aberto', tamanho: 'p', alinhamento: 'centro', posicao_imagem: 'esquerda', tamanho_texto: 'g', contorno: false, sombra: false, miniatura: '' };
+  const PADRAO_OPCOES = { layout: 'classico', visibilidade: 'aberto', tamanho: 'p', alinhamento: 'centro', posicao_imagem: 'esquerda', tamanho_texto: 'g', contorno: false, sombra: false, miniatura: '', pai_tamanho: 'compacto', pai_cor_bloco: '', pai_cor_texto: '' };
   const VAZIO = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; // miniatura vazia (mostra só o fundo cinza)
   const PRESETS = {
     links: ['link', 'Bloco de links', 'Botões simples, um embaixo do outro.'],
@@ -848,9 +848,17 @@
       corpo = [abas,
         el('p', { className: 'ajuda', textContent: 'Título e subtítulo são opcionais e ajudam o cliente a achar o que procura.' }),
         campo('Título', l, 'titulo', { ajuda: 'No bloco recolhido, é o texto do botão.' }),
-        campo('Subtítulo', l, 'subtitulo', { ajuda: 'Aparece só com o bloco aberto.' }),
+        campo('Subtítulo', l, 'subtitulo', { ajuda: 'Aparece abaixo do título no card, recolhido ou aberto.' }),
         escolhas('Visibilidade do bloco', 'visibilidade', [['aberto', 'Aberto', 'aberto'], ['recolhido', 'Recolhido', 'recolhido']]),
-        o.visibilidade === 'recolhido' && campoImagem('Imagem do botão recolhido', o, 'miniatura', { max: 600, mostra: VAZIO, ajuda: 'Opcional. Quadrada, aparece à esquerda do título.' }),
+        o.visibilidade === 'recolhido' && escolhas('Tamanho do card', 'pai_tamanho', [['compacto', 'Compacto', 'recolhido'], ['destaque', 'Destaque', 'cards']]),
+        o.visibilidade === 'recolhido' && campoImagem('Imagem do card', o, 'miniatura', { max: 1200, mostra: VAZIO, ajuda: 'Opcional. No Compacto vira um ícone redondo; no Destaque ocupa o lado esquerdo do card.' }),
+        o.visibilidade === 'recolhido' && el('div', { className: 'cartao', style: 'margin-bottom:14px' }, el('b', { textContent: 'Cores do card (independentes dos links de dentro)' }),
+          ...[['Fundo do card', 'pai_cor_bloco', estado.config.cor_bloco || '#FFFFFF'], ['Texto do card', 'pai_cor_texto', estado.config.cor_texto || '#581512']].map(([rot, k, padrao]) => {
+            const i = el('input', { type: 'color', value: o[k] || padrao, ariaLabel: rot });
+            i.addEventListener('input', () => { o[k] = i.value.toUpperCase(); marcar(); });
+            return el('label', { className: 'cor' }, rot, i);
+          }),
+          el('button', { type: 'button', className: 'secundario', textContent: 'Usar as cores da página', onclick: () => { o.pai_cor_bloco = o.pai_cor_texto = ''; marcar(); desenhar(); } })),
         campo('Código da loja (opcional)', l, 'loja', { dica: 'fornopaulistasul', ajuda: 'Para separar os resultados por unidade: o mesmo código do endereço no site de pedidos.' })];
     }
     return [voltar, el('div', { className: 'painel' }, topo, corpo)];

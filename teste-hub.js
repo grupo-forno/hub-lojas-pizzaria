@@ -389,6 +389,26 @@ const chamar = (h, req) => new Promise(ok => {
   assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?dados=1', headers: comoCookie(cookieDe(trocou)) })).c, 401);
   assert.equal((await query('select count(*)::int n from sessoes where usuario_id = $1', [idBruno])).rows[0].n, 0);
 
+  // ---- Card pai do dropdown: subtítulo, cores próprias e tamanho Destaque; bloco antigo cai nos padrões ----
+  {
+    const b0 = clone();
+    const sem = JSON.parse(JSON.stringify(b0)); delete sem.links[0].opcoes.pai_tamanho; delete sem.links[0].opcoes.pai_cor_bloco; // bloco "antigo"
+    const salvoSem = await post(sem);
+    assert.equal(salvoSem.c, 200, salvoSem.d?.erro);
+    assert.deepEqual([salvoSem.d.links[0].opcoes.pai_tamanho, salvoSem.d.links[0].opcoes.pai_cor_bloco], ['compacto', '']);
+    const ruim = JSON.parse(JSON.stringify(b0)); ruim.links[0].opcoes.pai_cor_texto = 'vermelho';
+    assert.equal((await post(ruim)).c, 400);
+    const ruim2 = JSON.parse(JSON.stringify(b0)); ruim2.links[0].opcoes.pai_tamanho = 'gigante';
+    assert.equal((await post(ruim2)).c, 400);
+    const pai = JSON.parse(JSON.stringify(b0));
+    Object.assign(pai.links[0], { subtitulo: 'Rua Hugo Napoleão, 1778, Fátima' });
+    Object.assign(pai.links[0].opcoes, { visibilidade: 'recolhido', pai_tamanho: 'destaque', pai_cor_bloco: '#000000', pai_cor_texto: '#FFFFFF' });
+    assert.equal((await post(pai)).c, 200);
+    const pub = (await chamar(pagina, { method: 'GET', url: '/api/pagina' })).d.links[0];
+    assert.deepEqual([pub.subtitulo, pub.opcoes.pai_tamanho, pub.opcoes.pai_cor_bloco, pub.opcoes.pai_cor_texto], ['Rua Hugo Napoleão, 1778, Fátima', 'destaque', '#000000', '#FFFFFF']);
+    assert.equal((await post(b0)).c, 200); // volta ao original
+  }
+
   // ---- Fundo do topo: foto única, vídeo ou carrossel automático; tamanho da logo ----
   {
     const urlVideo = videoMp4.d.url;

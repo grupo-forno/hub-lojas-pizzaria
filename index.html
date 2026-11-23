@@ -84,6 +84,15 @@
   .img-direita .cartao .img { order: 2; border-radius: 0 var(--raio) var(--raio) 0; }
   .img-direita .cartao .txt { border-radius: var(--raio) 0 0 var(--raio); }
   .cartao b { font-weight: 600; margin-bottom: 2px; }
+  .cartao.sem-img.so-titulo { min-height: 56px; } .cartao.sem-img.so-titulo .txt { padding: 10px 24px; }
+  .acao.so-titulo { min-height: 56px; } .tam-g .acao.so-titulo { min-height: 72px; }
+  /* Card pai do dropdown: o texto quebra linha sem encostar na seta; no Destaque a imagem ocupa o lado esquerdo */
+  .pai .pai-txt { display: flex; flex-direction: column; min-width: 0; padding: 8px 0; overflow-wrap: anywhere; }
+  .pai .pai-txt small { font: 400 13px/1.3 var(--fonte), "Segoe UI", Arial, sans-serif; opacity: .8; margin-top: 2px; }
+  .pai.destaque { padding: 0 52px 0 0; min-height: 112px; overflow: hidden; justify-content: flex-start; text-align: left; }
+  .pai.destaque .pai-img { flex: 0 0 42%; align-self: stretch; }
+  .pai.destaque .pai-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pai.destaque .pai-txt { flex: 1; padding: 12px 8px 12px 14px; }
   .cartao, .carrossel > * { position: relative; }
   /* Etiqueta no canto do botão (NOVO, PROMO...) */
   .etiqueta { position: absolute; top: -9px; right: 18px; z-index: 1; padding: 1px 10px; border-radius: 99px; background: var(--cor-texto); color: var(--cor-bloco); font: 600 11px/1.6 var(--fonte), Arial, sans-serif; letter-spacing: .04em; text-transform: uppercase; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
@@ -323,6 +332,7 @@
     const a = clicar(el('a', 'pilula acao'), l);
     const i = icone(l);
     if (i) a.append(i);
+    else if (!l.subtitulo) a.classList.add('so-titulo'); // só título: botão compacto
     const t = el('span', 'texto', l.titulo);
     if (l.subtitulo && l.tipo === 'acao') t.append(el('small', '', l.subtitulo));
     a.append(t);
@@ -338,7 +348,7 @@
       if (ehImagem(v)) i.append(suave(Object.assign(new Image(), { src: v, alt: '', loading: 'lazy', decoding: 'async' })));
       else i.innerHTML = iconeSvg(v.slice(2), 64, 1.2);
       a.append(i);
-    } else a.classList.add('sem-img');
+    } else a.classList.add('sem-img', ...(f.subtitulo ? [] : ['so-titulo']));
     const t = el('div', 'txt');
     t.append(el('b', '', f.titulo));
     if (f.subtitulo) t.append(el('span', '', f.subtitulo));
@@ -401,15 +411,23 @@
       return b;
     }
     const d = el('details');
-    const s = el('summary', 'pilula', l.titulo || l.nome);
-    if (ehImagem(o.miniatura)) { // imagem do botão recolhido (aba Configurações)
-      const m = el('span', 'icone');
+    // Card pai (cabeçalho do dropdown): título + subtítulo, imagem (ícone redondo ou lado esquerdo no Destaque) e cores próprias.
+    const destaque = o.pai_tamanho === 'destaque';
+    const s = el('summary', `pilula pai${destaque ? ' destaque' : ''}`);
+    if (o.pai_cor_bloco) s.style.setProperty('--cor-bloco', o.pai_cor_bloco); // só no cabeçalho: os filhos têm as suas
+    if (o.pai_cor_texto) s.style.setProperty('--cor-texto', o.pai_cor_texto);
+    if (ehImagem(o.miniatura)) {
+      const m = el('span', destaque ? 'pai-img' : 'icone');
       m.setAttribute('aria-hidden', 'true');
-      m.append(suave(Object.assign(new Image(), { src: o.miniatura, alt: '', decoding: 'async', className: 'icone-img' })));
-      s.prepend(m);
+      m.append(suave(Object.assign(new Image(), { src: o.miniatura, alt: '', decoding: 'async', ...(destaque ? {} : { className: 'icone-img' }) })));
+      s.append(m);
     }
+    const txt = el('span', 'pai-txt');
+    txt.append(el('span', '', l.titulo || l.nome));
+    if (l.subtitulo) txt.append(el('small', '', l.subtitulo));
+    s.append(txt);
     s.insertAdjacentHTML('beforeend', '<svg class="seta" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>');
-    d.append(s, lista); // como no Beacons, o subtítulo não aparece no botão recolhido
+    d.append(s, lista);
     // Abrir e fechar suave: a lista cresce/recolhe (altura + transparência). Sem animação para quem prefere menos movimento.
     const respiro = '12px'; // o mesmo padding-top de .acoes
     const animar = (de, para, fim) => {
