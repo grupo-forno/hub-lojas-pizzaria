@@ -39,9 +39,9 @@
   .capa { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 60%; opacity: 0; transition: opacity .9s ease; }
   .capa.on { opacity: 1; }
   .topo::after { content: ""; position: absolute; left: 0; right: 0; top: 57%; bottom: 0; background: linear-gradient(transparent, var(--vinho) 61%); }
-  .logo { position: absolute; left: 50%; bottom: calc(22.2% + 12px); transform: translateX(-50%); width: var(--logo-larg, 190px); max-width: 92%; height: auto; z-index: 1; }
+  .logo { position: absolute; left: 50%; bottom: calc(22.2% - 2px); transform: translateX(-50%); width: var(--logo-larg, 190px); max-width: 92%; height: auto; z-index: 1; }
   .compartilhar { position: absolute; top: 14px; right: 14px; z-index: 2; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--cor-topo); display: none; place-items: center; cursor: pointer; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
-  .social { position: absolute; left: 0; right: 0; top: 77.8%; z-index: 1; display: flex; justify-content: center; gap: 4px; }
+  .social { position: absolute; left: 0; right: 0; top: calc(77.8% + 14px); z-index: 1; display: flex; justify-content: center; gap: 4px; }
   .social a { color: var(--cor-topo); display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; }
 
   ul { list-style: none; margin: calc(var(--larg) * -0.1705) 0 0; padding: 0 20px; display: grid; gap: 24px; position: relative; z-index: 1; }
@@ -117,7 +117,8 @@
 
   /* Tela de abertura: a logo respirando até a capa e a logo estarem prontas; depois ela some com um fade. */
   .carregando { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--vinho); transition: opacity .4s ease, visibility .4s; }
-  .carregando img { width: min(46vw, 200px); height: auto; animation: respirar 1.8s ease-in-out infinite; }
+  .carregando img { width: min(46vw, 200px); height: auto; opacity: 0; transition: opacity .3s ease; } /* sem logo até saber qual é a atual: nunca aparece uma antiga */
+  .carregando img.ok { opacity: 1; animation: respirar 1.8s ease-in-out infinite; }
   .carregando.pronto { opacity: 0; visibility: hidden; pointer-events: none; }
   @keyframes respirar { 50% { opacity: .5; transform: scale(.96); } }
 
@@ -131,8 +132,8 @@
     .topo { width: 420px; height: 520px; margin: 0 auto; overflow: visible; }
     .capa { border-radius: 16px; object-position: center top; }
     .topo::after { top: auto; height: 144px; border-radius: 0 0 16px 16px; background: linear-gradient(transparent, var(--vinho)); }
-    .logo { bottom: 44px; }
-    .social { top: 488px; }
+    .logo { bottom: 30px; }
+    .social { top: 502px; }
     ul { width: 600px; max-width: 100%; margin: 32px auto 0; }
     .compartilhar { top: 20px; right: 20px; }
   }
@@ -143,7 +144,6 @@
 </head>
 <body>
 <div class="carregando" id="carregando" role="status" aria-label="Carregando"><img id="carregando-logo" alt="" width="320" height="186"></div>
-<script>document.getElementById('carregando-logo').src = (window.__marca && window.__marca.logo) || 'logo-branca.png';</script>
 <noscript><style>.carregando { display: none; }</style></noscript>
 <main>
   <div class="topo">
@@ -482,7 +482,7 @@
     document.getElementById('logo').src = logo;
     css('--logo-larg', `${/^\d+$/.test(c.logo_tamanho || '') ? c.logo_tamanho : 190}px`);
     const aberturaLogo = document.getElementById('carregando-logo');
-    if (aberturaLogo && aberturaLogo.getAttribute('src') !== logo) aberturaLogo.src = logo; // primeira visita: a abertura troca pela logo configurada
+    if (aberturaLogo && !aberturaLogo.classList.contains('ok')) pronta(logo).then(() => { aberturaLogo.src = logo; aberturaLogo.classList.add('ok'); }); // só a logo atual, já pronta
     const prontos = Promise.all([fundo(c), pronta(logo)]);
     // Ícones sociais do topo (lista do admin); páginas antigas só tinham o Instagram.
     let redes = [];
