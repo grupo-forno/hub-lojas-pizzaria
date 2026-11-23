@@ -41,6 +41,7 @@
   .topo::after { content: ""; position: absolute; left: 0; right: 0; top: 57%; bottom: 0; background: linear-gradient(transparent, var(--vinho) 61%); }
   .logo { position: absolute; left: 50%; bottom: calc(22.2% - 2px); transform: translateX(-50%); width: var(--logo-larg, 190px); max-width: 92%; height: auto; z-index: 1; }
   .compartilhar { position: absolute; top: 14px; right: 14px; z-index: 2; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--cor-topo); display: none; place-items: center; cursor: pointer; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
+  .sem-social .logo { bottom: calc(22.2% - 46px); } /* sem ícones sociais a logo desce, perto dos botões */
   .social { position: absolute; left: 0; right: 0; top: calc(77.8% + 14px); z-index: 1; display: flex; justify-content: center; gap: 4px; }
   .social a { color: var(--cor-topo); display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; }
 
@@ -133,6 +134,7 @@
     .capa { border-radius: 16px; object-position: center top; }
     .topo::after { top: auto; height: 144px; border-radius: 0 0 16px 16px; background: linear-gradient(transparent, var(--vinho)); }
     .logo { bottom: 30px; }
+    .sem-social .logo { bottom: 4px; }
     .social { top: 502px; }
     ul { width: 600px; max-width: 100%; margin: 32px auto 0; }
     .compartilhar { top: 20px; right: 20px; }
@@ -497,6 +499,7 @@
       a.addEventListener('click', () => registrar({ tipo: 'click', acao: r.rede }));
       document.getElementById('social').append(a);
     }
+    document.querySelector('.topo').classList.toggle('sem-social', !document.getElementById('social').children.length);
     const ul = document.getElementById('lojas');
     for (const l of links) {
       const li = document.createElement('li');
