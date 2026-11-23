@@ -75,13 +75,13 @@
   .aberto > p { margin: 2px 0 0; text-align: center; color: var(--cor-topo); opacity: .8; font-size: 14px; }
 
   /* Layout Card: imagem quadrada de um lado (esquerda ou direita), texto do outro */
-  .cartao { display: grid; grid-template-columns: 1fr 1fr; aspect-ratio: 2 / 1; color: var(--cor-texto); text-decoration: none; }
+  .cartao { display: grid; grid-template-columns: 1fr 1fr; aspect-ratio: 2 / 1; color: var(--cor-texto); text-decoration: none; border-radius: var(--raio); box-shadow: var(--sombra); border: var(--contorno); }
   .cartao.sem-img { grid-template-columns: 1fr; aspect-ratio: auto; min-height: 96px; }
-  .cartao .img { overflow: hidden; display: grid; place-items: center; color: var(--cor-topo); }
+  .cartao .img { overflow: hidden; display: grid; place-items: center; color: var(--cor-topo); border-radius: var(--raio) 0 0 var(--raio); }
   .cartao .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .cartao .txt { background: var(--cor-bloco); border-radius: 0 var(--raio) var(--raio) 0; box-shadow: var(--sombra); border: var(--contorno); padding: 0 14px; display: flex; flex-direction: column; justify-content: center; text-align: center; font-size: 16px; line-height: 1.25; }
+  .cartao .txt { background: var(--cor-bloco); border-radius: 0 var(--raio) var(--raio) 0; padding: 0 14px; display: flex; flex-direction: column; justify-content: center; text-align: center; font-size: 16px; line-height: 1.25; }
   .cartao.sem-img .txt { border-radius: var(--raio); padding: 16px 24px; }
-  .img-direita .cartao .img { order: 2; }
+  .img-direita .cartao .img { order: 2; border-radius: 0 var(--raio) var(--raio) 0; }
   .img-direita .cartao .txt { border-radius: var(--raio) 0 0 var(--raio); }
   .cartao b { font-weight: 600; margin-bottom: 2px; }
   .cartao, .carrossel > * { position: relative; }
@@ -220,6 +220,7 @@
       try { await img.decode(); } catch {}
       img.style.transition = 'none';
       img.classList.add('on');
+      void img.offsetWidth; // força o estilo a valer já, sem fade
       setTimeout(() => { img.style.transition = ''; }, 60); // as próximas trocas voltam a ter o fade
     };
 
