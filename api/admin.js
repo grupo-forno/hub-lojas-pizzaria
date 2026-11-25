@@ -6,7 +6,9 @@ const { query, pool, arvore } = require('./_lib/db.js');
 const { autenticar } = require('./_lib/auth.js');
 const usuarios = require('./_lib/usuarios.js');
 const { ICONES, REDES } = require('../icones.js');
-const { resultados } = require('./_lib/resultados.js');
+const { resultados, funil } = require('./_lib/resultados.js');
+const campanhas = require('./_lib/campanhas.js');
+const { enderecoDoSite } = require('./_lib/email.js');
 
 const CAMPOS = ['titulo', 'rodape', 'cor', 'cor_topo', 'cor_bloco', 'cor_texto', 'fonte', 'estilo', 'sombra', 'contorno', 'capa', 'logo', 'instagram',
   'capa_tipo', 'capa_video', 'capa_fotos', 'capa_intervalo', 'logo_tamanho']; // fundo do topo (foto, vídeo ou carrossel) e tamanho da logo
@@ -235,7 +237,7 @@ module.exports = async (req, res) => {
     const eu = await autenticar(req);
     const q = new URL(req.url, 'http://x').searchParams;
     if (!eu) { // sem sessão: a página mostra a tela de entrada; as chamadas de dados recebem 401
-      if (req.method === 'GET' && !['dados', 'resultados', 'historico', 'usuarios'].some(k => q.has(k))) {
+      if (req.method === 'GET' && !['dados', 'resultados', 'funil', 'campanhas', 'campanha', 'historico', 'usuarios'].some(k => q.has(k))) {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.status(200).send(fs.readFileSync(path.join(__dirname, '_login.html')));
       }
@@ -245,7 +247,15 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       if (q.has('dados')) return res.status(200).json({ ...(await carregar()), usuario, eu: { id: eu.id, nome: eu.nome, email: eu.email, papel: eu.papel, mestra: eu.mestra } });
       if (q.has('usuarios')) return eu.papel === 'admin' ? res.status(200).json({ usuarios: await usuarios.listar() }) : res.status(403).json({ erro: 'Só administradores gerenciam usuários.' });
-      if (q.has('resultados')) { const dias = [7, 30, 90].includes(Number(q.get('dias'))) ? Number(q.get('dias')) : 30; return res.status(200).json(await resultados(dias)); }
+      const dias = [7, 30, 90].includes(Number(q.get('dias'))) ? Number(q.get('dias')) : 30;
+      // filtros: só códigos simples (letras, números, ponto, traço, _); a campanha é o utm_id cadastrado (pf_ + 10 hex)
+      const filtros = {};
+      for (const k of ['unidade', 'botao', 'origem']) if (/^[\w.-]{1,80}$/.test(q.get(k) || '')) filtros[k] = q.get(k);
+      if (q.get('campanha')) { if (!campanhas.UID.test(q.get('campanha'))) return res.status(400).json({ erro: 'Campanha inválida.' }); filtros.campanha = q.get('campanha'); }
+      if (q.has('resultados')) return res.status(200).json(await resultados(dias, filtros));
+      if (q.has('funil')) return res.status(200).json(await funil(dias, filtros));
+      if (q.has('campanhas')) return res.status(200).json({ campanhas: await campanhas.listar(dias), dias });
+      if (q.has('campanha')) { const d = filtros.campanha && await campanhas.detalhe(filtros.campanha, dias); return d ? res.status(200).json(d) : res.status(404).json({ erro: 'Campanha não encontrada.' }); }
       if (q.has('historico')) return res.status(200).json((await query('select ts, usuario, mudancas from alteracoes order by id desc limit 100')).rows);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(fs.readFileSync(path.join(__dirname, '_admin.html')));
@@ -255,6 +265,12 @@ module.exports = async (req, res) => {
     if (req.headers['x-requested-with'] !== 'admin') return res.status(403).json({ erro: 'Requisição não permitida.' });
     let b = req.body;
     if (typeof b === 'string') { try { b = JSON.parse(b); } catch { b = null; } }
+    if (q.has('campanhas')) {
+      let site;
+      try { site = enderecoDoSite(req); } catch { return res.status(503).json({ erro: 'Configure SITE_URL (domínio público do hub) na Vercel para gerar links de campanha.' }); }
+      const r = await campanhas.operar(b || {}, site);
+      return res.status(r.status).json(r.corpo);
+    }
     if (q.has('usuarios')) {
       const r = await usuarios.operar(req, res, eu, b || {});
       return res.status(r.status).json(r.corpo);
@@ -265,6 +281,7 @@ module.exports = async (req, res) => {
     res.status(200).json({ ...(await carregar()), usuario, eu: { id: eu.id, nome: eu.nome, email: eu.email, papel: eu.papel, mestra: eu.mestra } });
   } catch (e) {
     console.error('admin', e.message);
+    if (e.status) return res.status(e.status).json({ erro: e.message });
     res.status(500).json({ erro: 'Algo deu errado no servidor. Tente de novo em instantes.' });
   }
 };

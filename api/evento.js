@@ -16,8 +16,8 @@ module.exports = async (req, res) => {
   const linkId = Number.isInteger(b.link_id) && b.link_id > 0 ? b.link_id : null;
   try {
     await query(
-      'insert into eventos (tipo, link_id, loja, acao, origem, meio, campanha, dispositivo) values ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [b.tipo, linkId, texto(b.loja), texto(b.acao), texto(b.origem), texto(b.meio), texto(b.campanha), aparelho(req.headers['user-agent'] || '')],
+      'insert into eventos (tipo, link_id, loja, acao, origem, meio, campanha, dispositivo, campanha_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [b.tipo, linkId, texto(b.loja), texto(b.acao), texto(b.origem), texto(b.meio), texto(b.campanha), aparelho(req.headers['user-agent'] || ''), texto(b.utm_id)],
     );
     res.status(204).end();
   } catch (e) {

@@ -130,6 +130,133 @@ const chamar = (h, req) => new Promise(ok => {
   assert.equal(res.links[0].titulo, 'Faça Seu Pedido');
   assert.equal(res.links[0].bloco, 'Hugo Napoleão');
   assert.equal(res.ga.ok, false);
+  // Sem GA4: todos os botões aparecem (inclusive os de zero cliques) e os números do GA4 ficam "indisponível", nunca zero.
+  const totalBotoes = (await query("select count(*)::int n from links where tipo = 'acao'")).rows[0].n;
+  assert.equal(res.botoes.length, totalBotoes);
+  assert.ok(res.botoes.every(b => b.usuarios.estado === 'indisponivel' && b.taxa.estado === 'indisponivel'));
+  assert.equal(res.visao.compradores.estado, 'indisponivel');
+  // Campanhas + Resultados com o GA4 de mentira. O caso que estava errado: vendas só pelo utm_id de campanha CADASTRADA.
+  const campanhas = require('./api/_lib/campanhas.js');
+  const falso = require('./scripts/ga-falso.js');
+  const gaMod = require('./api/_lib/ga.js'), originais = { relatorio: gaMod.relatorio, configurado: gaMod.configurado };
+  const SITE = 'https://pedeforno.grupofornopaulista.com';
+  const perto = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
+  try {
+    // Cadastro: link no domínio público, UTMs e utm_id estável; nada de duplicar parâmetros
+    const nova = await campanhas.operar({ acao: 'criar', nome: 'Natal WhatsApp', origem: 'whatsapp', meio: 'messaging', campanha: 'natal_2026' }, SITE);
+    assert.equal(nova.status, 200);
+    const nc = nova.corpo.campanha, lk = new URL(nc.link);
+    assert.match(nc.uid, /^pf_[0-9a-f]{10}$/);
+    assert.equal(lk.origin, SITE);
+    assert.deepEqual(Object.fromEntries(lk.searchParams), { utm_source: 'whatsapp', utm_medium: 'messaging', utm_campaign: 'natal_2026', utm_id: nc.uid });
+    assert.equal((await campanhas.operar({ acao: 'criar', nome: 'Outra', origem: 'whatsapp', meio: 'messaging', campanha: 'natal_2026' }, SITE)).status, 409, 'mesmos parâmetros = campanha repetida');
+    assert.equal((await campanhas.operar({ acao: 'criar', nome: 'Ruim', origem: 'Whats App', meio: 'messaging', campanha: 'x' }, SITE)).status, 400);
+    assert.equal((await campanhas.operar({ acao: 'criar', nome: '', origem: 'a', meio: 'b', campanha: 'c' }, SITE)).status, 400);
+    const comTermo = (await campanhas.operar({ acao: 'criar', nome: 'Com termo', origem: 'sms', meio: 'sms', campanha: 'promo_sms', conteudo: 'story_1', termo: 'combo' }, SITE)).corpo.campanha;
+    assert.deepEqual([...new URL(comTermo.link).searchParams.keys()], ['utm_source', 'utm_medium', 'utm_campaign', 'utm_id', 'utm_content', 'utm_term']);
+    // Duas campanhas do cenário, com o utm_id fixo que o GA4 de mentira usa
+    await query(`insert into campanhas (uid, nome, origem, meio, campanha, link) values ($1, 'Black Friday', 'whatsapp', 'messaging', 'black_friday_2026', 'x'), ($2, 'Bio', 'instagram', 'organic_social', 'bio', 'y')`, [falso.CAMPANHA_A, falso.CAMPANHA_B]);
+
+    // Coleta: a página manda o utm_id; só entra texto válido
+    const ev = body => chamar(evento, { headers: { 'user-agent': 'Mozilla/5.0 (iPhone) Mobile' }, body });
+    const A = { origem: 'whatsapp', meio: 'messaging', campanha: 'black_friday_2026', utm_id: falso.CAMPANHA_A };
+    for (let i = 0; i < 3; i++) await ev({ tipo: 'view', ...A });
+    const hugoId = (await query("select id from links where acao = 'pedido' and loja = 'fornopaulistaleste'")).rows[0].id;
+    await ev({ tipo: 'click', link_id: hugoId, loja: 'fornopaulistaleste', acao: 'pedido', ...A });
+    await ev({ tipo: 'view', origem: 'whatsapp', meio: 'messaging', campanha: 'black_friday_2026', utm_id: 'pf_zzzzzzzzzz' }); // campanha de fora: não é da A mesmo com os mesmos nomes
+    await ev({ tipo: 'view', utm_id: '<script>' }); // lixo vira nulo
+    // Link antigo (sem utm_id) com origem/meio/campanha exatamente os da B: associado, e marcado como antigo
+    for (let i = 0; i < 2; i++) await ev({ tipo: 'view', origem: 'instagram', meio: 'organic_social', campanha: 'bio' });
+    await ev({ tipo: 'view', origem: 'instagram', meio: 'organic_social', campanha: 'bio_outra' }); // parecido, não é igual: fora
+    assert.equal((await query('select count(*)::int n from eventos where campanha_id is not null')).rows[0].n, 5);
+    await query("insert into eventos (tipo, link_id, acao) values ('click', 99999, 'link')");
+    falso.instalar(gaMod);
+    const lista = await campanhas.listar(30);
+    const por = uid => lista.find(c => c.uid === uid);
+    assert.equal(por(falso.CAMPANHA_A).visitas, 3); assert.equal(por(falso.CAMPANHA_A).cliques_pedido, 1);
+    assert.equal(por(falso.CAMPANHA_B).visitas, 2); assert.equal(por(falso.CAMPANHA_B).antigos, 2);
+    assert.deepEqual(por(falso.CAMPANHA_A).pedidos, { valor: 1 }); perto(por(falso.CAMPANHA_A).receita.valor, 89.9);
+    assert.deepEqual(por(falso.CAMPANHA_B).pedidos, { valor: 2 }); perto(por(falso.CAMPANHA_B).receita.valor, 178.95);
+    assert.deepEqual(por(nc.uid).pedidos, { valor: 0 }, 'campanha nova sem venda: zero de uma consulta válida');
+    assert.equal(por(nc.uid).visitas, 0);
+
+    // Resultados: "Todas as campanhas" = só as cadastradas. Fora: externa (5.000 × 2, mesmos nomes), link antigo (777), diretas (70 × 108, 60 × 12)
+    const todas = await resultados(30);
+    assert.equal(todas.visao.pedidos.valor, 3); perto(todas.visao.receita.valor, 268.85); assert.equal(todas.visao.compradores.valor, 3);
+    const soA = await resultados(30, { campanha: falso.CAMPANHA_A });
+    assert.equal(soA.visao.pedidos.valor, 1); perto(soA.visao.receita.valor, 89.9);
+    const soB = await resultados(30, { campanha: falso.CAMPANHA_B });
+    assert.equal(soB.visao.pedidos.valor, 2); perto(soB.visao.receita.valor, 178.95);
+    const noHugo = await resultados(30, { unidade: 'fornopaulistaleste' });
+    assert.equal(noHugo.visao.pedidos.valor, 1); perto(noHugo.visao.receita.valor, 55.5);
+    await assert.rejects(resultados(30, { campanha: 'pf_0000000000' }), e => e.status === 400, 'campanha que não existe não vira total');
+    for (const r of [todas, soA, noHugo]) {
+      const texto = JSON.stringify(r);
+      assert.ok(!('loja_total' in r) && !/5000|10000|19325.85|\b777\b|7560/.test(texto), 'o retorno não pode trazer total da loja nem vendas de fora');
+      assert.deepEqual(Object.keys(r.ga.existe).filter(k => typeof r.ga.existe[k] !== 'boolean'), [], 'só existe/não existe, nunca contagem da loja');
+    }
+    assert.equal(todas.unidades.find(u => u.loja === 'fornopaulistadomseverino').compradores.valor, 2);
+    // Botões: todos aparecem (zero cliques inclusive), removido guarda o histórico, base da taxa por tipo de bloco
+    assert.equal(todas.botoes.filter(b => !b.removido).length, totalBotoes);
+    assert.equal(todas.botoes.find(b => b.button_id === 'leste_pedido').base.tipo, 'card');
+    assert.equal(todas.botoes.find(b => b.button_type === 'evento').base_tipo, 'automatica'); // bloco já aberto: exposição automática
+    assert.ok(todas.botoes.some(b => b.removido && b.nome === 'Link 99999 (removido)' && b.cliques === 1), 'histórico de botão removido');
+    // Funil pela API: mesmas regras
+    const { funil } = require('./api/_lib/resultados.js');
+    assert.deepEqual((await funil(30, {})).passos.map(p => p.valor), [5, 4, 4, undefined, 4, 3, 3]);
+    assert.deepEqual((await funil(30, { campanha: falso.CAMPANHA_A })).passos.map(p => p.valor), [2, 2, 2, undefined, 2, 1, 1]);
+    assert.deepEqual((await funil(30, { origem: 'instagram' })).passos.map(p => p.valor)[0], 3, 'origem escolhe campanhas cadastradas');
+
+    // Pela rota HTTP do admin (filtros de verdade, validação e permissão)
+    const get = url => chamar(admin, { method: 'GET', url, headers: login });
+    assert.equal((await get('/api/admin?resultados=1&dias=30&unidade=fornopaulistaleste')).d.visao.pedidos.valor, 1, 'filtro de unidade chega à consulta');
+    assert.equal((await get('/api/admin?resultados=1&dias=30&campanha=' + falso.CAMPANHA_A)).d.visao.pedidos.valor, 1);
+    assert.equal((await get('/api/admin?resultados=1&dias=30&campanha=pf_0000000000')).c, 400);
+    assert.equal((await get('/api/admin?resultados=1&dias=30&campanha=x;drop')).c, 400);
+    assert.equal((await get('/api/admin?funil=1&dias=30&campanha=' + falso.CAMPANHA_A)).d.passos[0].valor, 2);
+    assert.equal((await get('/api/admin?campanhas=1&dias=30')).d.campanhas.length, 4);
+    assert.equal((await get('/api/admin?campanha=' + falso.CAMPANHA_A + '&dias=30')).d.campanha.uid, falso.CAMPANHA_A);
+    assert.equal((await get('/api/admin?campanha=pf_0000000000&dias=30')).c, 404);
+    assert.equal((await chamar(admin, { method: 'GET', url: '/api/admin?campanhas=1', headers: {} })).c, 401, 'sem login não lista');
+    const criadaPelaApi = await chamar(admin, { url: '/api/admin?campanhas=1', headers: NOSSA_TELA, body: { acao: 'criar', nome: 'Pela API', origem: 'email', meio: 'email', campanha: 'teste_api' } });
+    assert.equal(criadaPelaApi.c, 200); assert.ok(criadaPelaApi.d.campanha.link.includes('utm_id=' + criadaPelaApi.d.campanha.uid));
+    assert.equal((await chamar(admin, { url: '/api/admin?campanhas=1', headers: login, body: { acao: 'criar', nome: 'x', origem: 'a', meio: 'b', campanha: 'c' } })).c, 403, 'POST exige o cabeçalho da nossa tela');
+    await query("delete from campanhas where uid = $1", [criadaPelaApi.d.campanha.uid]);
+
+    // Falha do GA4: indisponível, nunca vendas gerais
+    falso.instalar(gaMod, { falharEm: 'sessionManualCampaignId' });
+    const quebrada = await resultados(30);
+    assert.deepEqual(quebrada.visao.pedidos, { estado: 'indisponivel' }); assert.deepEqual(quebrada.visao.receita, { estado: 'indisponivel' });
+    assert.ok(!/5000|10000|19325.85|\b777\b|7560/.test(JSON.stringify(quebrada)));
+    const listaQuebrada = await campanhas.listar(30);
+    assert.ok(listaQuebrada.every(c => c.pedidos.estado === 'indisponivel' && c.receita.estado === 'indisponivel'));
+    falso.instalar(gaMod);
+
+    // Detalhe: cliques por botão; venda por botão só com evidência (utm_term = id do botão); se a campanha define termo, só no total
+    const det = await campanhas.detalhe(falso.CAMPANHA_A, 30);
+    assert.equal(det.hub.visitas, 3);
+    const regular = det.botoes.find(b => b.button_id === 'domseverino_pedido'), promo = det.botoes.find(b => b.button_id === 'promocional_domseverino_41');
+    assert.deepEqual(regular.pedidos, { valor: 1 }); assert.equal(regular.cliques, 0, 'cliques do banco só desta campanha');
+    assert.equal(det.botoes.find(b => b.button_id === 'leste_pedido').cliques, 1);
+    assert.deepEqual(det.vendas.pedidos, { valor: 1 });
+    assert.ok(det.jornada.passos.length === 7);
+    const detTermo = await campanhas.detalhe(comTermo.uid, 30);
+    assert.ok(detTermo.botoes.filter(b => !b.removido && ['pedido', 'promocional'].includes(b.button_type)).every(b => b.pedidos.estado === 'indisponivel'));
+    assert.equal(await campanhas.detalhe('pf_0000000000', 30), null);
+
+    // Renomear e arquivar: parâmetros, utm_id e link não mudam; o histórico continua
+    const antes = por(falso.CAMPANHA_A);
+    assert.equal((await campanhas.operar({ acao: 'renomear', uid: falso.CAMPANHA_A, nome: 'BF 2026' })).corpo.campanha.nome, 'BF 2026');
+    assert.equal((await campanhas.operar({ acao: 'arquivar', uid: falso.CAMPANHA_A })).corpo.campanha.arquivada, true);
+    const depois = (await campanhas.listar(30)).find(c => c.uid === falso.CAMPANHA_A);
+    assert.deepEqual([depois.link, depois.origem, depois.meio, depois.campanha, depois.criado, depois.visitas], [antes.link, antes.origem, antes.meio, antes.campanha, antes.criado, 3]);
+    assert.deepEqual(depois.pedidos, { valor: 1 }, 'arquivada continua contando no histórico');
+    assert.equal((await resultados(30)).visao.pedidos.valor, 3, 'arquivada continua em "Todas as campanhas"');
+    await ev({ tipo: 'view', ...A }); // o link já distribuído continua registrando
+    assert.equal((await campanhas.listar(30)).find(c => c.uid === falso.CAMPANHA_A).visitas, 4);
+    assert.equal((await campanhas.operar({ acao: 'restaurar', uid: falso.CAMPANHA_A })).corpo.campanha.arquivada, false);
+    assert.equal((await campanhas.operar({ acao: 'renomear', uid: 'pf_nao_existe', nome: 'x' })).status, 400);
+  } finally { Object.assign(gaMod, originais); }
 
   // Imagens: só JPG/PNG/WebP de verdade, com login; a devolução é igual ao que foi enviado (sem perda).
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');

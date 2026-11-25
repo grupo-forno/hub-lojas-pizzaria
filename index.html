@@ -162,13 +162,16 @@
 </main>
 <script src="lojas.js"></script>
 <script src="icones.js"></script>
+<script src="analytics.js"></script>
 <script>
   // Repassa todos os utm_* recebidos; sem eles, marca como acesso direto ao hub.
   const recebidos = new URLSearchParams(location.search);
   const utm = new URLSearchParams([...recebidos].filter(([k]) => k.startsWith('utm_')));
+  const utmRecebidas = new URLSearchParams(utm); // só o que veio na URL: vence o padrão e o que o destino já tinha
   if (!utm.has('utm_source')) utm.set('utm_source', 'hub');
   if (!utm.has('utm_medium')) utm.set('utm_medium', 'direto');
-  const base = { origem: utm.get('utm_source'), meio: utm.get('utm_medium'), campanha: utm.get('utm_campaign') };
+  const padraoUtm = { utm_source: 'hub', utm_medium: 'direto' };
+  const base = { origem: utm.get('utm_source'), meio: utm.get('utm_medium'), campanha: utm.get('utm_campaign'), utm_id: utm.get('utm_id') };
 
   const { rastreio, lojas } = CONFIG;
   // sendBeacon sobrevive à troca de página; se falhar, o cliente segue para o destino igual.
@@ -288,14 +291,18 @@
   const seguro = u => (/^(https?:\/\/|mailto:|tel:)/i.test(u || '') ? u : '#');
   function destino(l) {
     const u = new URL(seguro(l.url), location.href);
-    if (l.utm) for (const [k, v] of utm) u.searchParams.set(k, v);
-    return u.href;
+    return l.utm && /^https?:$/.test(u.protocol) ? destinoComUtm(u.href, utmRecebidas, padraoUtm, identificar(l, l.bloco, lojas).button_id) : u.href;
   }
   const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls || '', textContent: txt || '' });
 
   function clicar(a, l) {
-    a.href = destino(l);
+    a.href = destino(l); // o GA4 acrescenta o _gl a este href no clique: depois de pronto, ninguém mais o reescreve
+    // GA4: um hub_button_click por acionamento. Clique e Enter chegam como 'click'; o botão do meio (nova aba) como 'auxclick'.
+    // Nada de preventDefault nem de mexer em target/rel: a navegação e a nova aba seguem como o link foi montado.
+    const ga = () => eventoGA('hub_button_click', identificar(l, l.bloco, lojas));
+    if (!previa && l.url) a.addEventListener('auxclick', e => { if (e.button === 1) ga(); });
     a.addEventListener('click', () => {
+      if (!previa && l.url) ga();
       registrar({ tipo: 'click', link_id: l.id, loja: l.loja, acao: l.acao });
       // E-mail marketing: o painel de campanhas ainda lê os cliques de pedido do n8n.
       if (rastreio && !previa && l.acao === 'pedido') {
@@ -397,6 +404,7 @@
   function bloco(l) {
     const o = l.opcoes || {};
     const filhos = l.filhos.filter(noAr);
+    for (const f of filhos) f.bloco = l; // o GA4 precisa saber de que bloco o botão é (unidade, promoção, cardápio...)
     if (!filhos.length && l.filhos.length) return null; // todos os links fora do período agendado
     const lista = el('div', `acoes tam-${o.tamanho || 'p'} alin-${o.alinhamento || 'centro'} img-${o.posicao_imagem || 'esquerda'} txt-${o.tamanho_texto || 'g'}`);
     if (o.contorno) lista.style.setProperty('--contorno', '2px solid var(--cor-texto)');
@@ -449,6 +457,7 @@
       e.preventDefault(); // o navegador abriria/fecharia de uma vez; fazemos com animação
       if (d.open) return d.fechar();
       d.open = true;
+      if (!previa && l.loja) eventoGA('hub_unit_open', { unit_id: l.loja }); // só clique explícito; bloco já aberto na carga não passa por aqui
       animar({ height: '0px', paddingTop: '0px', opacity: 0 }, { height: `${lista.offsetHeight}px`, paddingTop: respiro, opacity: 1 });
     });
     d.addEventListener('toggle', () => {
@@ -530,6 +539,7 @@
   });
 
   registrar({ tipo: 'view' });
+  if (!previa) { iniciarGA(); eventoGA('hub_view'); } // a prévia do admin não vai para o GA4
   fetch(previa ? '/api/pagina?previa=1' : '/api/pagina', { signal: AbortSignal.timeout(6000) })
     .then(r => (r.ok ? r.json() : Promise.reject()))
     .catch(reserva)

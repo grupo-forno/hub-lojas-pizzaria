@@ -230,6 +230,13 @@
   .tabela .num { text-align: right; font-variant-numeric: tabular-nums; }
   .tabela tbody th { font-weight: 500; }
   .duas-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .tile strong.estado { font-size: .95rem; font-weight: 600; line-height: 1.6; color: var(--mudo); }
+  .filtros-funil { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 14px; }
+  .filtro-funil { display: grid; gap: 2px; font-size: .8rem; color: var(--mudo); }
+  .filtro-funil select { min-width: 150px; }
+  .sub-funil { margin: 14px 0 2px; font-size: .95rem; }
+  .link-btn { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--texto); text-decoration: underline; cursor: pointer; }
+  tr.arquivada { opacity: .6; }
   .aviso-ga { background: #FFF8E6; border: 1px solid #F5DFA6; border-radius: 10px; padding: 10px 14px; font-size: .85rem; margin-bottom: 16px; }
   details.numeros { margin-top: 10px; font-size: .85rem; }
   details.numeros summary { cursor: pointer; color: var(--mudo); }
@@ -295,6 +302,8 @@
     <button class="item sub" type="button" data-vista="design">Design</button>
     <div class="sep"></div>
     <button class="item" type="button" data-vista="resultados"><span data-i="grafico"></span>Resultados</button>
+    <button class="item" type="button" data-vista="campanhas"><span data-i="card"></span>Campanhas</button>
+    <button class="item" type="button" data-vista="links"><span data-i="link"></span>Criar links</button>
     <button class="item" type="button" data-vista="historico"><span data-i="relogio"></span>Histórico</button>
     <button class="item" type="button" data-vista="usuarios" id="m-usuarios" hidden><span data-i="pessoas"></span>Usuários</button>
     <div class="eu" id="eu">
@@ -925,21 +934,25 @@
 
   // ---------- Vista: Resultados ----------
   let periodo = 30;
-  const FUSO = 'America/Fortaleza';
+  const FUSO = 'America/Sao_Paulo';
   const fmt = n => Number(n || 0).toLocaleString('pt-BR');
   const brl = n => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const pct = (a, b) => (b ? `${((a / b) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%` : '–');
   const dataCurta = k => k.slice(8, 10) + '/' + k.slice(5, 7);
   const APARELHO = { celular: 'Celular', computador: 'Computador', tablet: 'Tablet' };
 
+  let filtroCampanha = '', filtroUnidade = ''; // valem para vendas, tabela de unidades e funil
   function vistaResultados() {
     const corpo = el('div', {}, el('p', { className: 'ajuda', textContent: 'Carregando…' }));
     const filtros = el('div', { className: 'filtros', role: 'group', ariaLabel: 'Período' }, [7, 30, 90].map(d =>
       el('button', { type: 'button', textContent: `${d} dias`, ariaPressed: String(periodo === d), onclick: () => { periodo = d; desenhar(); } })));
-    fetch(`/api/admin?resultados=1&dias=${periodo}`)
+    const q = new URLSearchParams({ resultados: 1, dias: periodo });
+    if (filtroCampanha) q.set('campanha', filtroCampanha);
+    if (filtroUnidade) q.set('unidade', filtroUnidade);
+    fetch(`/api/admin?${q}`)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error())))
-      .then(d => corpo.replaceChildren(...painelResultados(d)))
-      .catch(() => corpo.replaceChildren(el('p', { className: 'ajuda', textContent: 'Não foi possível carregar os resultados agora.' })));
+      .then(d => corpo.replaceChildren(...painelResultados(d).filter(Boolean)))
+      .catch(() => { filtroCampanha = filtroUnidade = ''; corpo.replaceChildren(el('p', { className: 'ajuda', textContent: 'Não foi possível carregar os resultados agora.' })); });
     return [el('div', { className: 'res' }, el('div', { className: 'cab-res' }, el('h1', { textContent: 'Resultados' }), filtros), corpo)];
   }
 
@@ -952,39 +965,104 @@
   }
   const secao = (titulo, ajuda, ...conteudo) => el('section', { className: 'res-sec' }, el('h2', { textContent: titulo }), ajuda && el('p', { className: 'ajuda', textContent: ajuda }), conteudo);
 
+  // Indicadores do GA4: { valor } | { estado: 'validando' | 'indisponivel' }. Zero só aparece quando a consulta deu certo.
+  const ESTADO = { validando: 'Rastreamento em validação', indisponivel: 'Dados indisponíveis' };
+  const txt = (x, f = fmt) => (x && x.valor != null ? f(x.valor) : ESTADO[x?.estado] || ESTADO.indisponivel);
+  const pctV = x => (x?.estado === 'indisponivel' && x.motivo ? 'Indisponível (sem base)' : txt(x, v => `${(v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`));
+  const TIPO_BOTAO = { pedido: 'Pedido', whatsapp: 'WhatsApp', localizacao: 'Localização', promocional: 'Promocional', cardapio: 'Cardápio', evento: 'Evento', outro: 'Outro' };
+  const BASE = { card: 'abriram o card', automatica: 'entraram no hub (bloco já aberto)' };
+
   function painelResultados(d) {
-    const t = d.totais, a = d.anterior, g = d.ga.ok ? d.ga.total : null;
+    const t = d.totais, a = d.anterior, ok = d.ga.ok, v = d.visao;
     const variacao = (agora, antes) => {
       if (!antes) return el('span', { className: 'var', textContent: agora ? 'sem dados no período anterior' : '' });
       const p = ((agora - antes) / antes) * 100;
       return el('span', { className: 'var ' + (p >= 0 ? 'sobe' : 'desce'), textContent: `${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% vs ${d.dias} dias anteriores` });
     };
-    const tile = (rotulo, valor, extra, dica = '') => el('div', { className: 'tile', title: dica }, el('span', { className: 'rot', textContent: rotulo }), el('strong', { textContent: valor }), extra);
+    const nota = texto => el('span', { className: 'var', textContent: texto });
+    const tile = (rotulo, valor, extra, dica = '', medido = null) => el('div', { className: 'tile', title: medido?.motivo || dica },
+      el('span', { className: 'rot', textContent: rotulo }), el('strong', { textContent: valor, className: medido && medido.valor == null ? 'estado' : '' }), extra);
+    const ga = (rotulo, x, f, nt, dica) => tile(rotulo, txt(x, f), nota(nt), dica, x);
+        const barra = el('div', { className: 'filtros-funil' },
+      ...[['Campanha', filtroCampanha, [['', 'Todas as campanhas'], ...d.opcoes.campanhas.map(c => [c.uid, c.nome + (c.arquivada ? ' (arquivada)' : '')])], x => { filtroCampanha = x; }],
+        ['Unidade (vendas e funil)', filtroUnidade, [['', 'Todas as unidades'], ...d.opcoes.unidades.map(u => [u.loja, u.nome])], x => { filtroUnidade = x; }]].map(([rot, atual, itens, set]) =>
+        el('label', { className: 'filtro-funil' }, rot, el('select', { onchange: e => { set(e.target.value); desenhar(); } }, itens.map(([v, t]) => el('option', { value: v, textContent: t, selected: v === atual }))))));
     return [
-      !d.ga.ok && el('p', { className: 'aviso-ga', textContent: d.ga.motivo }),
+      barra,
+      !ok && el('p', { className: 'aviso-ga', textContent: d.ga.motivo }),
+      ok && !d.ga.dimensoes && el('p', { className: 'aviso-ga', textContent: 'Por unidade e por botão: dados indisponíveis. Cadastre button_id, button_type e unit_id como dimensões personalizadas de evento no GA4 (Admin › Definições personalizadas).' }),
       el('div', { className: 'tiles' },
-        tile('Visitas', fmt(t.visitas), variacao(t.visitas, a.visitas), 'Cada abertura da página conta uma visita'),
-        tile('Cliques', fmt(t.cliques), variacao(t.cliques, a.cliques)),
-        tile('Taxa de clique', pct(t.cliques, t.visitas), el('span', { className: 'var', textContent: 'cliques ÷ visitas' })),
+        tile('Visitas', fmt(t.visitas), variacao(t.visitas, a.visitas), 'Cada abertura da página conta uma visita (a mesma pessoa pode contar mais de uma vez)'),
+        tile('Cliques', fmt(t.cliques), variacao(t.cliques, a.cliques), 'Cada clique em um link conta uma vez'),
         tile('Cliques em "Pedido"', fmt(t.pedidos), variacao(t.pedidos, a.pedidos)),
-        g && tile('Compras', fmt(g.compras), el('span', { className: 'var', textContent: 'de quem veio pela página' }), 'Google Analytics do site de pedidos'),
-        g && tile('Receita', brl(g.receita), el('span', { className: 'var', textContent: 'de quem veio pela página' }), 'Google Analytics do site de pedidos')),
+        ga('Usuários medidos', v.usuarios, fmt, 'pessoas que abriram o hub (GA4)', 'Usuários com hub_view no Google Analytics'),
+        ga('Usuários que clicaram em pedido', v.pedidoUsuarios, fmt, 'pessoas distintas (GA4)', 'Usuários com hub_button_click em botão de pedido (regular ou promocional)'),
+        ga('Compradores de campanhas', v.compradores, fmt, 'só campanhas cadastradas', 'Usuários com purchase em sessões da Tuigo com o utm_id de uma campanha cadastrada'),
+        ga('Pedidos de campanhas', v.pedidos, fmt, 'evento purchase', 'Eventos purchase em sessões da Tuigo com o utm_id de uma campanha cadastrada'),
+        ga('Receita de campanhas', v.receita, brl, 'evento purchase', 'Valor dos purchase dessas sessões')),
+      el('p', { className: 'ajuda', textContent: 'Pedidos e receita: só de campanhas cadastradas no hub (aba Campanhas), ligados pelo utm_id. Compras diretas na Tuigo, sem campanha identificável ou de campanhas de fora do hub não entram. "Pedidos pagos" só aparece quando a Tuigo confirmar o pagamento; hoje a fonte é o evento purchase, que ainda não tem o momento de disparo validado.' }),
       secao('Visitas e cliques por dia', '', grafico(d)),
-      secao('Funil até a compra', g ? 'Os dois primeiros passos são da página; os outros vêm do Google Analytics, só para quem chegou pela página (mesma UTM).' : 'Os passos depois do clique em "Pedido" aparecem quando o Google Analytics estiver disponível.', funil(t, g)),
-      secao('Origens', 'De onde vieram as visitas (as UTMs do link). A mesma UTM segue até o site de pedidos.',
-        tabela(['Origem / meio / campanha', 'Visitas', 'Cliques', 'Taxa', 'Cliques em Pedido', ...(g ? ['Sessões na loja', 'Compras', 'Receita'] : [])],
-          d.origens.map(o => [[o.origem, o.meio, o.campanha].filter(Boolean).join(' / '), fmt(o.visitas), fmt(o.cliques), pct(o.cliques, o.visitas), fmt(o.pedidos),
-            ...(g ? [fmt(o.ga.sessoes), fmt(o.ga.compras), brl(o.ga.receita)] : [])]), 'Nenhuma visita no período.')),
+      secaoFunil(d),
+      secao('Unidades', 'Usuários distintos (GA4), exceto a coluna de contagem. "Chegadas" são sessões na Tuigo com o utm_id de campanha cadastrada (as escolhidas no filtro); compradores contam só essas sessões.',
+        tabela(['Unidade', 'Abriram o card', 'Faça Seu Pedido', 'WhatsApp', 'Localização', 'Chegadas à Tuigo (campanhas)', 'Compradores (campanhas)', 'Aberturas (contagem)'],
+          d.unidades.map(u => [u.nome, txt(u.abriram), txt(u.pedido), txt(u.whatsapp), txt(u.localizacao), txt(u.chegadas), txt(u.compradores), fmt(d.lojas.find(l => l.loja === u.loja)?.aberturas)]), 'Nenhuma unidade cadastrada.')),
+      secao('Botões', 'Taxa = usuários que clicaram ÷ usuários expostos ao botão. Em card recolhido a base é quem abriu o card; em bloco já aberto a exposição é automática e a base é quem entrou no hub. Sem base, a taxa fica indisponível. Botões removidos continuam aqui enquanto tiverem dados.',
+        tabela(['Botão', 'Tipo', 'Unidade', 'Cliques totais', 'Usuários que clicaram', 'Base (usuários expostos)', 'Taxa'],
+          d.botoes.map(b => [`${b.nome}${b.ativo === false ? ' (desativado)' : ''}`, TIPO_BOTAO[b.button_type] || '–', b.unidade_nome || '–', fmt(b.cliques), txt(b.usuarios),
+            b.base?.tipo ? `${txt(b.base)} · ${BASE[b.base.tipo]}` : '–', pctV(b.taxa)]), 'Nenhum botão cadastrado.')),
+      secao('Origens', 'De onde vieram as visitas (as UTMs do link de entrada), contadas pela página. Pedidos e receita por campanha ficam na aba Campanhas: UTM sozinha não liga venda a campanha.',
+        tabela(['Origem / meio / campanha', 'Visitas', 'Cliques', 'Taxa', 'Cliques em Pedido'],
+          d.origens.map(o => [[o.origem, o.meio, o.campanha].filter(Boolean).join(' / '), fmt(o.visitas), fmt(o.cliques), pct(o.cliques, o.visitas), fmt(o.pedidos)]), 'Nenhuma visita no período.')),
       el('div', { className: 'duas-col' },
         secao('Links mais clicados', '',
           tabela(['Link', 'Cliques', '% das visitas'], d.links.map(l => [!l.titulo ? (l.bloco || `Link ${l.link_id} (removido)`) : !l.bloco || l.bloco === l.titulo ? l.titulo : `${l.bloco} › ${l.titulo}`, fmt(l.cliques), pct(l.cliques, t.visitas)]), 'Nenhum clique no período.')),
         secao('Aparelhos', '',
           tabela(['Aparelho', 'Visitas', '%'], d.aparelhos.map(x => [APARELHO[x.dispositivo] || x.dispositivo, fmt(x.visitas), pct(x.visitas, t.visitas)]), 'Nenhuma visita no período.'),
           d.sociais.length ? el('div', { style: 'margin-top:14px' }, tabela(['Ícone social', 'Cliques'], d.sociais.map(x => [ICONES[x.acao]?.[0] || x.acao, fmt(x.cliques)]), '')) : null)),
-      secao('Unidades', g ? 'Compras e receita por unidade vêm do Google Analytics e incluem todas as origens (não só a página).' : 'Aberturas do botão da unidade e cliques em cada link dela.',
-        tabela(['Unidade', 'Aberturas', 'Pedido', 'WhatsApp', 'Localização', ...(g ? ['Compras', 'Receita'] : [])],
-          d.lojas.map(l => [l.nome, fmt(l.aberturas), fmt(l.pedidos), fmt(l.whatsapp), fmt(l.mapa), ...(g ? [fmt(l.ga.compras), brl(l.ga.receita)] : [])]), 'Nenhum clique em unidades no período.')),
-      el('p', { className: 'ajuda', textContent: 'A página não usa cookies: cada abertura conta como uma visita (a mesma pessoa pode contar mais de uma vez). Abrir pela prévia do admin não conta.' }),
+      el('p', { className: 'ajuda', textContent: 'Visitas e cliques vêm da própria página, que não usa cookies: cada abertura é uma visita e a mesma pessoa pode contar mais de uma vez. Usuários, compradores e pedidos vêm do Google Analytics (pedidos só de campanhas cadastradas). Os dias seguem o horário de São Paulo; o GA4 usa o fuso da propriedade. Abrir pela prévia do admin não conta.' }),
+    ].filter(Boolean);
+  }
+
+  // Funil: escolha os filtros e veja usuários por etapa. Cada parte tem o seu escopo (hub / Tuigo).
+  function secaoFunil(d) {
+    const o = d.opcoes;
+    const sel = (rotulo, itens) => { const s = el('select', {}, el('option', { value: '', textContent: 'Todos' }), itens.map(([x, nome]) => el('option', { value: x, textContent: nome }))); s.onchange = carregar; return [el('label', { className: 'filtro-funil' }, rotulo, s), s]; };
+    const [lu, su] = sel('Unidade', o.unidades.map(u => [u.loja, u.nome]));
+    const [lb, sb] = sel('Botão de pedido', o.botoes.map(b => [b.id, b.nome]));
+    const [lo, so] = sel('Origem', o.origens.map(x => [x, x]));
+    const [lc, sc] = sel('Campanha', o.campanhas.map(c => [c.uid, c.nome + (c.arquivada ? ' (arquivada)' : '')]));
+    su.value = d.filtros.unidade; sc.value = d.filtros.campanha; // começa com o que está escolhido no topo
+    const corpo = el('div', {}, el('p', { className: 'ajuda', textContent: 'Carregando…' }));
+    function carregar() {
+      const q = new URLSearchParams({ funil: 1, dias: d.dias });
+      for (const [k, s] of [['unidade', su], ['botao', sb], ['origem', so], ['campanha', sc]]) if (s.value) q.set(k, s.value);
+      fetch(`/api/admin?${q}`).then(r => (r.ok ? r.json() : Promise.reject(new Error()))).then(f => corpo.replaceChildren(...desenharFunil(f)))
+        .catch(() => corpo.replaceChildren(el('p', { className: 'ajuda', textContent: ESTADO.indisponivel })));
+    }
+    carregar();
+    return secao('Funil até a compra', 'Usuários por etapa, só de campanhas cadastradas (sem escolha: todas elas). Conversão sobre a etapa anterior do mesmo escopo.', el('div', { className: 'filtros-funil' }, lu, lb, lo, lc), corpo);
+  }
+
+  function desenharFunil(f) {
+    if (f.indisponivel) return [el('p', { className: 'ajuda', textContent: `${ESTADO[f.estado] || ESTADO.indisponivel}${f.motivo ? `: ${f.motivo}` : ''}` })];
+    const tons = ['#86b6ef', '#6da7ec', '#3987e5', '#2a78d6', '#256abf', '#184f95', '#143f78'];
+    const grupo = (escopo, titulo, ajuda) => {
+      const passos = f.passos.filter(p => p.escopo === escopo);
+      const topo = Math.max(1, ...passos.map(p => p.valor || 0));
+      return [el('h3', { className: 'sub-funil', textContent: titulo }), el('p', { className: 'ajuda', textContent: ajuda }),
+        el('div', { className: 'funil' }, passos.map(p => el('div', { className: 'passo' },
+          el('span', { textContent: p.nome }),
+          el('div', { className: 'trilho-barra' }, p.valor != null ? el('div', { className: 'barra', style: `width:${(p.valor / topo) * 100}%;background:${tons[f.passos.indexOf(p)]}` }) : null),
+          el('span', { className: 'valor' }, txt(p), el('small', { textContent: p.conversao?.valor != null ? `${(p.conversao.valor * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% da etapa anterior` : p.conversao?.estado ? 'Conversão indisponível' : '' })))))];
+    };
+    const filtroHub = f.filtrosHub.unidade || f.filtrosHub.botao ? ' "Entrou no hub" não tem unidade nem botão: é sempre o total de quem entrou.' : '';
+    const j = f.jornada;
+    return [
+      ...grupo('hub', 'No hub', `Eventos do hub (hub_view, hub_button_click).${filtroHub}`),
+      ...grupo('tuigo', 'Na Tuigo', 'Usuários das sessões com o utm_id da campanha e que fizeram o evento; contagem por evento, não por sequência. O botão filtra pelo id em utm_term. A Tuigo não emite select_item nem view_item.'),
+      el('div', { className: 'ajuda', style: 'margin-top:10px' }, j.disponivel
+        ? [`Jornada hub → Tuigo, mesma pessoa em até ${j.janela} entre etapas: `, j.passos.map(p => `${p.nome} ${fmt(p.usuarios)}`).join(' → ')]
+        : `Conversão hub → Tuigo indisponível. ${j.motivo}`),
     ];
   }
 
@@ -1046,18 +1124,6 @@
     const numeros = el('details', { className: 'numeros' }, el('summary', { textContent: 'Ver os números por dia' }),
       tabela(['Dia', 'Visitas', 'Cliques'], dias.slice().reverse().map(p => [dataCurta(p.dia), fmt(p.visitas), fmt(p.cliques)]), ''));
     return [legenda, caixa, numeros];
-  }
-
-  // Funil: barras do maior para o menor, com a % de quem seguiu do passo anterior.
-  function funil(t, g) {
-    const passos = [['Visitas na página', t.visitas], ['Cliques em "Pedido"', t.pedidos]];
-    if (g) passos.push(['Chegaram na loja', g.sessoes], ['Puseram no carrinho', g.carrinho], ['Foram pagar', g.checkout], ['Compraram', g.compras]);
-    const tons = ['#86b6ef', '#6da7ec', '#3987e5', '#2a78d6', '#256abf', '#184f95']; // rampa azul, um tom por passo
-    const topo = Math.max(1, ...passos.map(p => p[1]));
-    return el('div', { className: 'funil' }, passos.map(([nome, v], i) => el('div', { className: 'passo' },
-      el('span', { textContent: nome }),
-      el('div', { className: 'trilho-barra' }, el('div', { className: 'barra', style: `width:${(v / topo) * 100}%;background:${tons[i]}` })),
-      el('span', { className: 'valor' }, fmt(v), i ? el('small', { textContent: `${pct(v, passos[i - 1][1])} do passo anterior` }) : null))));
   }
 
   // ---------- Vista: Usuários (só administrador) e Minha conta ----------
@@ -1144,7 +1210,147 @@
         el('p', { className: 'ajuda', textContent: 'Esqueceu a senha atual? Saia e use "Esqueci minha senha" na tela de entrada.' }))];
   }
 
+  // ---------- Vista: Campanhas (cadastro com utm_id, link pronto, resultados por campanha) ----------
+  const SUGESTAO_MEIO = { whatsapp: 'messaging', instagram: 'organic_social', facebook: 'organic_social', tiktok: 'organic_social', email: 'email', sms: 'sms', google: 'cpc' };
+  let campanhaAberta = null; // utm_id da campanha aberta no detalhe
+  async function campanhasApi(corpo) {
+    const r = await fetch('/api/admin?campanhas=1', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requested-with': 'admin' }, body: JSON.stringify(corpo) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erro || `Erro ${r.status}`);
+    return d;
+  }
+  const botaoCopiar = (texto, rotulo = 'Copiar link') => {
+    const b = el('button', { type: 'button', textContent: rotulo });
+    b.onclick = async () => {
+      try { await navigator.clipboard.writeText(texto); } catch { const t = el('textarea', { value: texto }); document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
+      b.textContent = 'Copiado!'; setTimeout(() => (b.textContent = rotulo), 1500);
+    };
+    return b;
+  };
+  const dataBR = iso => new Date(iso).toLocaleDateString('pt-BR', { timeZone: FUSO });
+
+  function vistaCampanhas() {
+    const corpo = el('div', {}, el('p', { className: 'ajuda', textContent: 'Carregando…' }));
+    const filtros = el('div', { className: 'filtros', role: 'group', ariaLabel: 'Período' }, [7, 30, 90].map(d =>
+      el('button', { type: 'button', textContent: `${d} dias`, ariaPressed: String(periodo === d), onclick: () => { periodo = d; desenhar(); } })));
+    const falhou = () => corpo.replaceChildren(el('p', { className: 'ajuda', textContent: 'Não foi possível carregar as campanhas agora.' }));
+    if (campanhaAberta) {
+      fetch(`/api/admin?campanha=${campanhaAberta}&dias=${periodo}`).then(r => (r.ok ? r.json() : Promise.reject(new Error()))).then(d => corpo.replaceChildren(...detalheCampanha(d))).catch(falhou);
+    } else {
+      fetch(`/api/admin?campanhas=1&dias=${periodo}`).then(r => (r.ok ? r.json() : Promise.reject(new Error()))).then(d => corpo.replaceChildren(...listaCampanhas(d.campanhas))).catch(falhou);
+    }
+    return [el('div', { className: 'res' }, el('div', { className: 'cab-res' }, el('h1', { textContent: 'Campanhas' }), filtros), corpo)];
+  }
+
+  function formCampanha() {
+    const campo = (rot, ...x) => el('div', { className: 'campo' }, el('label', { textContent: rot }), ...x);
+    const nome = el('input', { type: 'text', placeholder: 'ex.: Black Friday 2026 – WhatsApp', maxLength: 80 });
+    const origem = el('select', {}, ORIGENS.map(([v, t]) => el('option', { value: v, textContent: t })));
+    const outraO = el('input', { type: 'text', placeholder: 'Nome da origem', hidden: true });
+    const meio = el('input', { type: 'text', value: SUGESTAO_MEIO.whatsapp, maxLength: 60 });
+    const camp = el('input', { type: 'text', placeholder: 'ex.: black_friday_2026', maxLength: 60 });
+    const conteudo = el('input', { type: 'text', placeholder: 'opcional', maxLength: 60 });
+    const termo = el('input', { type: 'text', placeholder: 'opcional (se preencher, as vendas não se separam por botão)', maxLength: 60 });
+    const msg = el('p', { className: 'msg', role: 'status', hidden: true });
+    const resultado = el('div', {});
+    let meioMexido = false;
+    meio.oninput = () => { meioMexido = true; };
+    origem.onchange = () => { outraO.hidden = origem.value !== 'outro'; if (!meioMexido && SUGESTAO_MEIO[origem.value]) meio.value = SUGESTAO_MEIO[origem.value]; }; // WhatsApp → messaging
+    const salvar = el('button', { type: 'button', className: 'primario', textContent: 'Criar campanha e gerar link' });
+    salvar.onclick = async () => {
+      mensagem(msg, '');
+      salvar.disabled = true;
+      try {
+        const { campanha: c } = await campanhasApi({ acao: 'criar', nome: nome.value, origem: limpar(origem.value === 'outro' ? outraO.value : origem.value), meio: limpar(meio.value), campanha: limpar(camp.value), conteudo: limpar(conteudo.value), termo: limpar(termo.value) });
+        const saida = el('input', { type: 'text', readOnly: true, value: c.link, ariaLabel: 'Link da campanha' });
+        resultado.replaceChildren(el('div', { className: 'painel', style: 'margin-top:12px' }, el('b', { textContent: `Campanha "${c.nome}" criada. utm_id: ${c.uid}` }),
+          el('p', { className: 'ajuda', textContent: 'Cole este link no botão da mensagem do n8n. Ele já leva o utm_id até a Tuigo.' }), saida, botaoCopiar(c.link),
+          el('button', { type: 'button', textContent: 'Ver na lista', onclick: desenhar })));
+        for (const x of [nome, camp, conteudo, termo]) x.value = '';
+      } catch (e) { mensagem(msg, e.message, 'erro'); }
+      salvar.disabled = false;
+    };
+    return el('details', { className: 'painel', style: 'margin-bottom:16px' }, el('summary', { textContent: 'Nova campanha' }),
+      el('p', { className: 'ajuda', textContent: 'O endereço usa o domínio público do hub. O utm_id é gerado ao salvar e nunca muda: é ele que liga as vendas à campanha. Origem, meio e campanha não podem ser alterados depois (os links já enviados continuam valendo); o nome pode.' }),
+      campo('Nome interno', nome), campo('Origem', origem, outraO), campo('Meio', meio), campo('Campanha', camp), campo('Conteúdo', conteudo), campo('Termo', termo), msg, salvar, resultado);
+  }
+
+  function listaCampanhas(lista) {
+    const celula = (x, f) => txt(x, f);
+    const linha = c => el('tr', { className: c.arquivada ? 'arquivada' : '' },
+      el('th', { scope: 'row' }, el('button', { type: 'button', className: 'link-btn', textContent: c.nome, onclick: () => { campanhaAberta = c.uid; desenhar(); } }), c.arquivada ? el('small', { textContent: ' arquivada' }) : null),
+      el('td', { textContent: [c.origem, c.meio, c.campanha].join(' / ') }), el('td', { textContent: dataBR(c.criado) }),
+      el('td', { className: 'num', textContent: fmt(c.visitas) }), el('td', { className: 'num', textContent: fmt(c.cliques_pedido) }),
+      el('td', { className: 'num', textContent: celula(c.pedidos) }), el('td', { className: 'num', textContent: celula(c.receita, brl) }),
+      el('td', {}, botaoCopiar(c.link)));
+    return [
+      formCampanha(),
+      secao('Campanhas cadastradas', 'Visitas e cliques vêm da página (contagens). Pedidos e receita vêm do Google Analytics e só de sessões que chegaram com o utm_id da campanha: compra direta, sem campanha ou de campanha de fora do hub não entra. Registros antigos (sem utm_id) só entram em visitas e cliques quando origem, meio e campanha são exatamente os da campanha.',
+        lista.length ? el('div', { className: 'tabela' }, el('table', {}, el('thead', {}, el('tr', {}, ['Campanha', 'Origem / meio / campanha', 'Criada em', 'Visitas', 'Cliques em pedido', 'Pedidos atribuídos', 'Receita', 'Link'].map((t, i) => el('th', { textContent: t, scope: 'col', className: i > 2 && i < 7 ? 'num' : '' })))), el('tbody', {}, lista.map(linha))))
+          : el('p', { className: 'ajuda', textContent: 'Nenhuma campanha ainda. Crie a primeira acima.' })),
+    ];
+  }
+
+  function detalheCampanha(d) {
+    const c = d.campanha, h = d.hub;
+    const renomear = el('button', { type: 'button', textContent: 'Renomear', onclick: async () => {
+      const nome = prompt('Novo nome interno da campanha (os links não mudam):', c.nome);
+      if (nome == null) return;
+      try { await campanhasApi({ acao: 'renomear', uid: c.uid, nome }); desenhar(); } catch (e) { alert(e.message); }
+    } });
+    const arquivar = el('button', { type: 'button', textContent: c.arquivada ? 'Restaurar' : 'Arquivar', onclick: async () => {
+      if (!c.arquivada && !confirm('Arquivar esta campanha? O link continua funcionando e o histórico fica guardado.')) return;
+      try { await campanhasApi({ acao: c.arquivada ? 'restaurar' : 'arquivar', uid: c.uid }); desenhar(); } catch (e) { alert(e.message); }
+    } });
+    const voltar = el('button', { type: 'button', textContent: '← Todas as campanhas', onclick: () => { campanhaAberta = null; desenhar(); } });
+    const tile = (rot, valor, dica = '', medido = null) => el('div', { className: 'tile', title: medido?.motivo || dica }, el('span', { className: 'rot', textContent: rot }), el('strong', { textContent: valor, className: medido && medido.valor == null ? 'estado' : '' }));
+    return [
+      el('div', { className: 'painel' }, voltar, el('h2', { textContent: `${c.nome}${c.arquivada ? ' (arquivada)' : ''}` }),
+        el('p', { className: 'ajuda', textContent: `${[c.origem, c.meio, c.campanha].join(' / ')} · utm_id ${c.uid} · criada em ${dataBR(c.criado)}` }),
+        el('input', { type: 'text', readOnly: true, value: c.link, ariaLabel: 'Link da campanha' }), botaoCopiar(c.link), renomear, arquivar),
+      el('div', { className: 'tiles', style: 'margin-top:16px' },
+        tile('Visitas', fmt(h.visitas), 'Cada abertura da página conta uma visita'), tile('Cliques', fmt(h.cliques)), tile('Cliques em pedido', fmt(h.cliques_pedido)),
+        tile('Pedidos atribuídos', txt(d.vendas.pedidos), 'Só sessões da Tuigo com o utm_id desta campanha', d.vendas.pedidos),
+        tile('Receita', txt(d.vendas.receita, brl), 'Só sessões da Tuigo com o utm_id desta campanha', d.vendas.receita),
+        tile('Compradores', txt(d.vendas.compradores), 'Só sessões da Tuigo com o utm_id desta campanha', d.vendas.compradores)),
+      h.antigos ? el('p', { className: 'ajuda', textContent: `Inclui ${fmt(h.antigos)} registros antigos (sem utm_id) cujos origem, meio e campanha são exatamente os desta campanha. Vendas nunca usam essa correspondência.` }) : null,
+      secao('Cliques por botão', 'Cliques no período vindos desta campanha. Venda por botão só aparece com evidência (o id do botão em utm_term); se a campanha define o próprio termo, as vendas ficam só no total acima.',
+        tabela(['Botão', 'Unidade', 'Cliques', 'Pedidos', 'Receita'], d.botoes.map(b => [b.nome, b.unidade_nome || '–', fmt(b.cliques), b.removido ? '–' : txt(b.pedidos), b.removido ? '–' : txt(b.receita, brl)]), 'Nenhum botão.')),
+      secao('Cliques por unidade', '', tabela(['Unidade', 'Cliques'], d.unidades.map(u => [u.nome, fmt(u.cliques)]), 'Nenhum clique em unidade no período.')),
+      secao('Etapas disponíveis da jornada', 'Cada etapa no seu escopo, só de sessões com o utm_id desta campanha.', ...(d.jornada ? desenharFunil(d.jornada) : [el('p', { className: 'ajuda', textContent: ESTADO.indisponivel })])),
+    ].filter(Boolean);
+  }
+
   // ---------- Vista: Histórico ----------
+  // ---------- Vista: Criar links (gera o endereço da página com UTM; sem salvar nada) ----------
+  const ORIGENS = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['facebook', 'Facebook'], ['tiktok', 'TikTok'], ['google', 'Google'], ['email', 'E-mail'], ['sms', 'SMS'], ['outro', 'Outro…']];
+  const ONDE = [['bio', 'Bio / perfil'], ['story', 'Story'], ['dm', 'Mensagem direta (DM)'], ['automacao', 'Automação (ex.: palavra-chave)'], ['transmissao', 'Lista de transmissão'], ['grupo', 'Grupo'], ['post', 'Post / reels'], ['anuncio', 'Anúncio pago'], ['qrcode', 'QR code impresso'], ['outro', 'Outro…']];
+  const limpar = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  function vistaLinks() {
+    const sel = (lista) => el('select', {}, lista.map(([v, t]) => el('option', { value: v, textContent: t })));
+    const origem = sel(ORIGENS), onde = sel(ONDE);
+    const outraO = el('input', { type: 'text', placeholder: 'Nome da origem', hidden: true }), outraM = el('input', { type: 'text', placeholder: 'Onde o link vai ficar', hidden: true });
+    const camp = el('input', { type: 'text', placeholder: 'ex.: promo_quinta_pizza_g', maxLength: 80 });
+    const saida = el('input', { type: 'text', readOnly: true, ariaLabel: 'Link pronto' });
+    const msg = el('p', { className: 'ajuda' });
+    const gerar = () => {
+      outraO.hidden = origem.value !== 'outro'; outraM.hidden = onde.value !== 'outro';
+      const o = limpar(origem.value === 'outro' ? outraO.value : origem.value), m = limpar(onde.value === 'outro' ? outraM.value : onde.value), c = limpar(camp.value);
+      const u = new URL(location.origin + '/');
+      if (o) u.searchParams.set('utm_source', o); if (m) u.searchParams.set('utm_medium', m); if (c) u.searchParams.set('utm_campaign', c);
+      saida.value = o && m && c ? u.href : '';
+      msg.textContent = saida.value ? 'Quem clicar entra na página e a origem aparece em Resultados como ' + o + ' / ' + m + ' / ' + c + '.' : 'Preencha a origem, onde o link vai ficar e o nome da campanha.';
+    };
+    for (const e of [origem, onde, camp, outraO, outraM]) e.oninput = gerar;
+    gerar();
+    const copiar = el('button', { type: 'button', textContent: 'Copiar link', onclick: async () => { if (!saida.value) return; try { await navigator.clipboard.writeText(saida.value); } catch { saida.select(); document.execCommand('copy'); } copiar.textContent = 'Copiado!'; setTimeout(() => (copiar.textContent = 'Copiar link'), 1500); } });
+    const campo = (rot, ...x) => el('div', { className: 'campo' }, el('label', { textContent: rot }), ...x);
+    return [el('div', { className: 'res' }, el('div', { className: 'cab-res' }, el('h1', { textContent: 'Criar links' })),
+      el('p', { className: 'ajuda', textContent: 'Gere um endereço da página para cada divulgação. Atenção: links daqui não têm utm_id, então contam visitas e cliques mas NÃO atribuem pedidos nem receita. Para vendas, cadastre a campanha na aba Campanhas.' }),
+      el('div', { className: 'painel', style: 'max-width:560px;margin-top:16px' },
+        campo('Origem', origem, outraO), campo('Onde o link vai ficar', onde, outraM),
+        campo('Nome da campanha', camp), campo('Link pronto', saida, msg), copiar))];
+  }
   function vistaHistorico() {
     const lista = el('div', {}, el('p', { className: 'ajuda', textContent: 'Carregando…' }));
     fetch('/api/admin?historico=1').then(r => (r.ok ? r.json() : Promise.reject(new Error()))).then(itens => {
@@ -1163,8 +1369,8 @@
     for (const b of document.querySelectorAll('[data-vista]')) {
       if (b.dataset.vista === (vista === 'editor' ? 'blocos' : vista)) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     }
-    document.querySelector('.app').classList.toggle('sem-previa', ['resultados', 'historico', 'usuarios', 'conta'].includes(vista));
-    $('centro').replaceChildren(...(vista === 'design' ? vistaDesign() : vista === 'historico' ? vistaHistorico() : vista === 'resultados' ? vistaResultados()
+    document.querySelector('.app').classList.toggle('sem-previa', ['resultados', 'campanhas', 'links', 'historico', 'usuarios', 'conta'].includes(vista));
+    $('centro').replaceChildren(...(vista === 'design' ? vistaDesign() : vista === 'historico' ? vistaHistorico() : vista === 'resultados' ? vistaResultados() : vista === 'campanhas' ? vistaCampanhas() : vista === 'links' ? vistaLinks()
       : vista === 'usuarios' && estado.eu.papel === 'admin' ? vistaUsuarios() : vista === 'conta' && !estado.eu.mestra ? vistaConta()
       : vista === 'editor' && editando ? vistaEditor(editando) : vistaBlocos()));
   }

@@ -44,6 +44,7 @@ console.log(guardado ? `Dados guardados (volume pedeforno-dev): ${guardado}` : '
 process.env.EMAIL_MODO ||= 'console'; // local: o e-mail aparece aqui no terminal, não é enviado
 process.env.INSIGHTS_USER ||= 'admin'; // só no teste local; em produção valem as variáveis da Vercel
 process.env.INSIGHTS_PASS ||= 'admin';
+if (process.env.GA_FALSO) { require('./ga-falso.js').instalar(require('../api/_lib/ga.js')); console.log('GA_FALSO: Resultados usa o Google Analytics de mentira (cenário Dom Severino).'); }
 const admin = require('../api/admin.js');
 const rotas = { '/api/pagina': require('../api/pagina.js'), '/api/evento': require('../api/evento.js'), '/api/admin': admin, '/admin': admin, '/api/imagem': require('../api/imagem.js'), '/api/acesso': require('../api/acesso.js') };
 const tipos = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.css': 'text/css' };

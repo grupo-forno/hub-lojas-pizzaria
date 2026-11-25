@@ -66,6 +66,20 @@ create table if not exists redefinicoes (
 );
 create table if not exists tentativas (chave text not null, ts timestamptz not null default now());
 create index if not exists tentativas_chave on tentativas (chave, ts);
+-- Campanhas do hub: o utm_id é a identidade estável (vai no link, na página e no GA4). Origem/meio/campanha/link nunca mudam
+-- depois de criados (links já distribuídos continuam valendo); só o nome e o arquivamento mudam. Arquivar não apaga nada.
+create table if not exists campanhas (
+  id serial primary key,
+  uid text not null unique,
+  nome text not null,
+  origem text not null, meio text not null, campanha text not null, conteudo text, termo text,
+  link text not null,
+  criado timestamptz not null default now(),
+  arquivada boolean not null default false,
+  unique (origem, meio, campanha)
+);
+alter table eventos add column if not exists campanha_id text; -- utm_id de quem entrou pela página (vazio nos registros antigos)
+create index if not exists eventos_campanha on eventos (campanha_id) where campanha_id is not null;
 `;
 
 const TUIGO = 'https://fornopaulista.tuigoapp.com.br';

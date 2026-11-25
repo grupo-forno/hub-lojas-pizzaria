@@ -29,8 +29,8 @@ async function token() {
   return guardado.valor;
 }
 
-async function relatorio(corpo) {
-  const r = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${env.GA4_PROPERTY_ID}:runReport`, {
+async function chamar(versao, metodo, corpo) {
+  const r = await fetch(`https://analyticsdata.googleapis.com/${versao}/properties/${env.GA4_PROPERTY_ID}:${metodo}`, {
     method: 'POST',
     headers: { authorization: `Bearer ${await token()}`, 'content-type': 'application/json' },
     body: JSON.stringify(corpo),
@@ -39,4 +39,8 @@ async function relatorio(corpo) {
   return r.json();
 }
 
-module.exports = { configurado, relatorio };
+const relatorio = corpo => chamar('v1beta', 'runReport', corpo);
+// Funil por sequência de eventos do mesmo usuário (API alfa do GA4: o formato pode mudar).
+const funil = corpo => chamar('v1alpha', 'runFunnelReport', corpo);
+
+module.exports = { configurado, relatorio, funil };
