@@ -230,6 +230,8 @@ async function salvar({ config, links }, usuario) {
   }
 }
 
+const siteOuNulo = req => { try { return enderecoDoSite(req); } catch { return null; } }; // sem SITE_URL a tela mostra só o link completo
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Robots-Tag', 'noindex');
@@ -254,8 +256,8 @@ module.exports = async (req, res) => {
       if (q.get('campanha')) { if (!campanhas.UID.test(q.get('campanha'))) return res.status(400).json({ erro: 'Campanha inválida.' }); filtros.campanha = q.get('campanha'); }
       if (q.has('resultados')) return res.status(200).json(await resultados(dias, filtros));
       if (q.has('funil')) return res.status(200).json(await funil(dias, filtros));
-      if (q.has('campanhas')) return res.status(200).json({ campanhas: await campanhas.listar(dias), dias });
-      if (q.has('campanha')) { const d = filtros.campanha && await campanhas.detalhe(filtros.campanha, dias); return d ? res.status(200).json(d) : res.status(404).json({ erro: 'Campanha não encontrada.' }); }
+      if (q.has('campanhas')) return res.status(200).json({ campanhas: await campanhas.listar(dias, siteOuNulo(req)), dias });
+      if (q.has('campanha')) { const d = filtros.campanha && await campanhas.detalhe(filtros.campanha, dias, siteOuNulo(req)); return d ? res.status(200).json(d) : res.status(404).json({ erro: 'Campanha não encontrada.' }); }
       if (q.has('historico')) return res.status(200).json((await query('select ts, usuario, mudancas from alteracoes order by id desc limit 100')).rows);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(fs.readFileSync(path.join(__dirname, '_admin.html')));

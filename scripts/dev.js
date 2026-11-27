@@ -46,7 +46,7 @@ process.env.INSIGHTS_USER ||= 'admin'; // só no teste local; em produção vale
 process.env.INSIGHTS_PASS ||= 'admin';
 if (process.env.GA_FALSO) { require('./ga-falso.js').instalar(require('../api/_lib/ga.js')); console.log('GA_FALSO: Resultados usa o Google Analytics de mentira (cenário Dom Severino).'); }
 const admin = require('../api/admin.js');
-const rotas = { '/api/pagina': require('../api/pagina.js'), '/api/evento': require('../api/evento.js'), '/api/admin': admin, '/admin': admin, '/api/imagem': require('../api/imagem.js'), '/api/acesso': require('../api/acesso.js') };
+const rotas = { '/api/pagina': require('../api/pagina.js'), '/api/evento': require('../api/evento.js'), '/api/admin': admin, '/admin': admin, '/api/imagem': require('../api/imagem.js'), '/api/acesso': require('../api/acesso.js'), '/api/l': require('../api/l.js') };
 const tipos = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.jpg': 'image/jpeg', '.png': 'image/png', '.css': 'text/css' };
 
 // ATRASO_MS=3000 npm run dev: as imagens e vídeos demoram esse tempo para chegar (simula celular com internet lenta; bom para ver a abertura).
@@ -55,7 +55,9 @@ const eMidia = p => p === '/api/imagem' || /\.(jpe?g|png|webp|mp4|webm)$/i.test(
 
 const servir = (req, res) => {
   const u = new URL(req.url, 'http://x');
-  const h = rotas[u.pathname];
+  const curto = u.pathname.match(/^\/l\/([^/]+)$/); // o rewrite /l/:codigo do vercel.json
+  if (curto) req.url = `/api/l?codigo=${curto[1]}`;
+  const h = rotas[curto ? '/api/l' : u.pathname];
   if (h) {
     let corpo = '';
     req.on('data', c => (corpo += c));

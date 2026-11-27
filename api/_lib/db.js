@@ -80,6 +80,10 @@ create table if not exists campanhas (
 );
 alter table eventos add column if not exists campanha_id text; -- utm_id de quem entrou pela página (vazio nos registros antigos)
 create index if not exists eventos_campanha on eventos (campanha_id) where campanha_id is not null;
+-- Código do link curto (/l/codigo): fixo depois de criado; as campanhas antigas ganham um derivado do utm_id.
+alter table campanhas add column if not exists codigo text;
+update campanhas set codigo = substr(md5(uid), 1, 6) where codigo is null;
+create unique index if not exists campanhas_codigo on campanhas (codigo);
 `;
 
 const TUIGO = 'https://fornopaulista.tuigoapp.com.br';

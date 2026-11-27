@@ -1279,10 +1279,10 @@
     const celula = (x, f) => txt(x, f);
     const linha = c => el('tr', { className: c.arquivada ? 'arquivada' : '' },
       el('th', { scope: 'row' }, el('button', { type: 'button', className: 'link-btn', textContent: c.nome, onclick: () => { campanhaAberta = c.uid; desenhar(); } }), c.arquivada ? el('small', { textContent: ' arquivada' }) : null),
-      el('td', { textContent: [c.origem, c.meio, c.campanha].join(' / ') }), el('td', { textContent: dataBR(c.criado) }),
+      el('td', { textContent: [c.origem, c.meio, c.campanha].filter(Boolean).join(' / ') }), el('td', { textContent: dataBR(c.criado) }),
       el('td', { className: 'num', textContent: fmt(c.visitas) }), el('td', { className: 'num', textContent: fmt(c.cliques_pedido) }),
       el('td', { className: 'num', textContent: celula(c.pedidos) }), el('td', { className: 'num', textContent: celula(c.receita, brl) }),
-      el('td', {}, botaoCopiar(c.link)));
+      el('td', {}, botaoCopiar(c.curto || c.link, c.curto ? 'Copiar link curto' : 'Copiar link'), c.curto ? botaoCopiar(c.link, 'Copiar link completo') : null));
     return [
       formCampanha(),
       secao('Campanhas cadastradas', 'Visitas e cliques vêm da página (contagens). Pedidos e receita vêm do Google Analytics e só de sessões que chegaram com o utm_id da campanha: compra direta, sem campanha ou de campanha de fora do hub não entra. Registros antigos (sem utm_id) só entram em visitas e cliques quando origem, meio e campanha são exatamente os da campanha.',
@@ -1306,8 +1306,8 @@
     const tile = (rot, valor, dica = '', medido = null) => el('div', { className: 'tile', title: medido?.motivo || dica }, el('span', { className: 'rot', textContent: rot }), el('strong', { textContent: valor, className: medido && medido.valor == null ? 'estado' : '' }));
     return [
       el('div', { className: 'painel' }, voltar, el('h2', { textContent: `${c.nome}${c.arquivada ? ' (arquivada)' : ''}` }),
-        el('p', { className: 'ajuda', textContent: `${[c.origem, c.meio, c.campanha].join(' / ')} · utm_id ${c.uid} · criada em ${dataBR(c.criado)}` }),
-        el('input', { type: 'text', readOnly: true, value: c.link, ariaLabel: 'Link da campanha' }), botaoCopiar(c.link), renomear, arquivar),
+        el('p', { className: 'ajuda', textContent: `${[c.origem, c.meio, c.campanha].filter(Boolean).join(' / ')} · utm_id ${c.uid} · criada em ${dataBR(c.criado)}` }),
+        el('input', { type: 'text', readOnly: true, value: c.curto || c.link, ariaLabel: 'Link da campanha' }), botaoCopiar(c.curto || c.link, c.curto ? 'Copiar link curto' : 'Copiar link'), c.curto ? botaoCopiar(c.link, 'Copiar link completo') : null, renomear, arquivar),
       el('div', { className: 'tiles', style: 'margin-top:16px' },
         tile('Visitas', fmt(h.visitas), 'Cada abertura da página conta uma visita'), tile('Cliques', fmt(h.cliques)), tile('Cliques em pedido', fmt(h.cliques_pedido)),
         tile('Pedidos atribuídos', txt(d.vendas.pedidos), 'Só sessões da Tuigo com o utm_id desta campanha', d.vendas.pedidos),
@@ -1322,7 +1322,7 @@
   }
 
   // ---------- Vista: Histórico ----------
-  // ---------- Vista: Criar links (gera o endereço da página com UTM; sem salvar nada) ----------
+  // ---------- Vista: Criar links (gera o endereço da página com UTM; salvar cria o link rastreável) ----------
   const ORIGENS = [['whatsapp', 'WhatsApp'], ['instagram', 'Instagram'], ['facebook', 'Facebook'], ['tiktok', 'TikTok'], ['google', 'Google'], ['email', 'E-mail'], ['sms', 'SMS'], ['outro', 'Outro…']];
   const ONDE = [['bio', 'Bio / perfil'], ['story', 'Story'], ['dm', 'Mensagem direta (DM)'], ['automacao', 'Automação (ex.: palavra-chave)'], ['transmissao', 'Lista de transmissão'], ['grupo', 'Grupo'], ['post', 'Post / reels'], ['anuncio', 'Anúncio pago'], ['qrcode', 'QR code impresso'], ['outro', 'Outro…']];
   const limpar = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -1332,24 +1332,48 @@
     const outraO = el('input', { type: 'text', placeholder: 'Nome da origem', hidden: true }), outraM = el('input', { type: 'text', placeholder: 'Onde o link vai ficar', hidden: true });
     const camp = el('input', { type: 'text', placeholder: 'ex.: promo_quinta_pizza_g', maxLength: 80 });
     const saida = el('input', { type: 'text', readOnly: true, ariaLabel: 'Link pronto' });
+    const codigo = el('input', { type: 'text', placeholder: 'automático (ou escolha, ex.: insta-bio)', maxLength: 30 });
     const msg = el('p', { className: 'ajuda' });
     const gerar = () => {
       outraO.hidden = origem.value !== 'outro'; outraM.hidden = onde.value !== 'outro';
       const o = limpar(origem.value === 'outro' ? outraO.value : origem.value), m = limpar(onde.value === 'outro' ? outraM.value : onde.value), c = limpar(camp.value);
       const u = new URL(location.origin + '/');
       if (o) u.searchParams.set('utm_source', o); if (m) u.searchParams.set('utm_medium', m); if (c) u.searchParams.set('utm_campaign', c);
-      saida.value = o && m && c ? u.href : '';
-      msg.textContent = saida.value ? 'Quem clicar entra na página e a origem aparece em Resultados como ' + o + ' / ' + m + ' / ' + c + '.' : 'Preencha a origem, onde o link vai ficar e o nome da campanha.';
+      saida.value = o && m ? u.href : '';
+      salvar.disabled = !saida.value;
+      msg.textContent = saida.value ? 'Quem clicar entra na página e a origem aparece em Resultados como ' + [o, m, c].filter(Boolean).join(' / ') + '.' : 'Preencha a origem e onde o link vai ficar. O nome da campanha é opcional.';
+    };
+    const rotulo = s => s.selectedOptions[0].textContent.replace('…', '');
+    const salvar = el('button', { type: 'button', className: 'primario', textContent: 'Salvar link' });
+    const salvos = el('div', {});
+    const carregar = () => fetch(`/api/admin?campanhas=1&dias=${periodo}`).then(r => (r.ok ? r.json() : Promise.reject(new Error()))).then(d => {
+      const ativos = d.campanhas.filter(c => !c.arquivada);
+      salvos.replaceChildren(secao('Links salvos', 'Clique no nome para ver as métricas. Salvar gera um utm_id: assim o link também atribui pedidos e receita.',
+        ativos.length ? el('div', { className: 'tabela' }, el('table', {}, el('thead', {}, el('tr', {}, ['Link', 'Origem / onde / campanha', 'Visitas', 'Cliques', 'Pedidos', ''].map(t => el('th', { textContent: t, scope: 'col' })))),
+          el('tbody', {}, ativos.map(c => el('tr', {}, el('th', { scope: 'row' }, el('button', { type: 'button', className: 'link-btn', textContent: c.nome, onclick: () => { campanhaAberta = c.uid; ir('campanhas'); } })),
+            el('td', { textContent: [c.origem, c.meio, c.campanha].filter(Boolean).join(' / ') }), el('td', { textContent: fmt(c.visitas) }), el('td', { textContent: fmt(c.cliques) }),
+            el('td', { textContent: txt(c.pedidos) }), el('td', {}, botaoCopiar(c.curto || c.link, c.curto ? 'Copiar link curto' : 'Copiar link'), c.curto ? botaoCopiar(c.link, 'Copiar link completo') : null))))))
+          : el('p', { className: 'ajuda', textContent: 'Nenhum link salvo ainda.' })));
+    }).catch(() => salvos.replaceChildren(el('p', { className: 'ajuda', textContent: 'Não foi possível carregar os links salvos.' })));
+    salvar.onclick = async () => {
+      salvar.disabled = true;
+      const o = limpar(origem.value === 'outro' ? outraO.value : origem.value), m = limpar(onde.value === 'outro' ? outraM.value : onde.value), c = limpar(camp.value);
+      try {
+        await campanhasApi({ acao: 'criar', nome: [rotulo(origem), rotulo(onde), camp.value.trim()].filter(Boolean).join(' – ').slice(0, 80), origem: o, meio: m, campanha: c, codigo: limpar(codigo.value).replace(/_/g, '-') });
+        camp.value = ''; codigo.value = ''; msg.textContent = 'Link salvo! Ele aparece na lista abaixo.'; await carregar();
+      } catch (e) { msg.textContent = e.message; }
+      salvar.disabled = !saida.value;
     };
     for (const e of [origem, onde, camp, outraO, outraM]) e.oninput = gerar;
-    gerar();
+    gerar(); carregar();
     const copiar = el('button', { type: 'button', textContent: 'Copiar link', onclick: async () => { if (!saida.value) return; try { await navigator.clipboard.writeText(saida.value); } catch { saida.select(); document.execCommand('copy'); } copiar.textContent = 'Copiado!'; setTimeout(() => (copiar.textContent = 'Copiar link'), 1500); } });
     const campo = (rot, ...x) => el('div', { className: 'campo' }, el('label', { textContent: rot }), ...x);
     return [el('div', { className: 'res' }, el('div', { className: 'cab-res' }, el('h1', { textContent: 'Criar links' })),
-      el('p', { className: 'ajuda', textContent: 'Gere um endereço da página para cada divulgação. Atenção: links daqui não têm utm_id, então contam visitas e cliques mas NÃO atribuem pedidos nem receita. Para vendas, cadastre a campanha na aba Campanhas.' }),
+      el('p', { className: 'ajuda', textContent: 'Gere o endereço da página para cada divulgação. O link pronto aparece sem precisar de campanha (ex.: Instagram + Bio). Para acompanhar as métricas, salve o link: o link copiado depois de salvo tem utm_id e atribui visitas, cliques e vendas. Links só copiados, sem salvar, não têm métricas próprias.' }),
       el('div', { className: 'painel', style: 'max-width:560px;margin-top:16px' },
         campo('Origem', origem, outraO), campo('Onde o link vai ficar', onde, outraM),
-        campo('Nome da campanha', camp), campo('Link pronto', saida, msg), copiar))];
+        campo('Nome da campanha (opcional)', camp), campo('Código do link curto (só vale ao salvar)', codigo), campo('Link pronto', saida, msg), copiar, salvar),
+      salvos)];
   }
   function vistaHistorico() {
     const lista = el('div', {}, el('p', { className: 'ajuda', textContent: 'Carregando…' }));

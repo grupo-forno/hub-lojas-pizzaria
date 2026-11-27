@@ -11,7 +11,11 @@ const { lojas: LOJAS } = require('../../lojas.js');
 
 const SLUG = /^[a-z0-9][a-z0-9_.-]{0,59}$/; // o mesmo formato que a página aceita gravar (api/evento.js)
 const UID = /^pf_[0-9a-f]{10}$/;
-const COLUNAS = 'id, uid, nome, origem, meio, campanha, conteudo, termo, link, criado, arquivada';
+const COLUNAS = 'id, uid, codigo, nome, origem, meio, campanha, conteudo, termo, link, criado, arquivada';
+const CODIGO = /^[a-z0-9][a-z0-9_-]{2,29}$/; // o que cabe depois de /l/
+const ALFABETO = 'abcdefghjkmnpqrstuvwxyz23456789'; // sem letras que se confundem (i, l, o, 0, 1)
+const codigoAleatorio = () => Array.from(crypto.randomBytes(6), b => ALFABETO[b % ALFABETO.length]).join('');
+const comCurto = (c, site) => ({ ...c, curto: site && c.codigo ? `${site}/l/${c.codigo}` : null }); // link curto: redireciona para o link completo (api/l.js)
 const SEM_GA = { estado: 'indisponivel', motivo: 'O Google Analytics só aparece no site publicado (as credenciais ficam na Vercel).' };
 
 // Eventos da campanha: os que trazem o utm_id dela; e os ANTIGOS (sem utm_id) cujos origem/meio/campanha são exatamente os dela
@@ -29,19 +33,26 @@ async function criar(b, site) {
   const nome = slug(b.nome);
   if (!nome || nome.length > 80) return { status: 400, corpo: { erro: 'Dê um nome interno de até 80 letras.' } };
   const c = { nome, origem: slug(b.origem).toLowerCase(), meio: slug(b.meio).toLowerCase(), campanha: slug(b.campanha).toLowerCase(), conteudo: slug(b.conteudo).toLowerCase() || null, termo: slug(b.termo).toLowerCase() || null };
-  for (const [k, rotulo, obrigatorio] of [['origem', 'Origem', 1], ['meio', 'Meio', 1], ['campanha', 'Campanha', 1], ['conteudo', 'Conteúdo'], ['termo', 'Termo']]) {
+  for (const [k, rotulo, obrigatorio] of [['origem', 'Origem', 1], ['meio', 'Meio', 1], ['campanha', 'Campanha'], ['conteudo', 'Conteúdo'], ['termo', 'Termo']]) {
     if (!c[k] ? obrigatorio : !SLUG.test(c[k])) return { status: 400, corpo: { erro: `${rotulo}: use letras minúsculas, números, ponto, traço ou _ (até 60).` } };
   }
   const igual = await query('select nome from campanhas where origem = $1 and meio = $2 and campanha = $3', [c.origem, c.meio, c.campanha]);
   if (igual.rowCount) return { status: 409, corpo: { erro: `Já existe a campanha "${igual.rows[0].nome}" com essa origem, meio e campanha. Mude um deles.` } };
-  for (let i = 0; i < 5; i++) { // o utm_id é sorteado; colisão é quase impossível, mas se houver tentamos outro
+  const pedido = slug(b.codigo).toLowerCase();
+  if (pedido && !CODIGO.test(pedido)) return { status: 400, corpo: { erro: 'Código do link: 3 a 30 letras minúsculas, números, traço ou _.' } };
+  for (let i = 0; i < 5; i++) { // utm_id e código aleatório são sorteados; colisão é quase impossível, mas se houver tentamos outro
     c.uid = `pf_${crypto.randomBytes(5).toString('hex')}`;
+    c.codigo = pedido || codigoAleatorio();
     c.link = linkDaCampanha(site, c);
     try {
-      const r = await query(`insert into campanhas (uid, nome, origem, meio, campanha, conteudo, termo, link) values ($1,$2,$3,$4,$5,$6,$7,$8) returning ${COLUNAS}`,
-        [c.uid, c.nome, c.origem, c.meio, c.campanha, c.conteudo, c.termo, c.link]);
-      return { status: 200, corpo: { campanha: r.rows[0] } };
-    } catch (e) { if (e.code !== '23505' || !/uid/.test(e.constraint || e.detail || '')) throw e; }
+      const r = await query(`insert into campanhas (uid, codigo, nome, origem, meio, campanha, conteudo, termo, link) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning ${COLUNAS}`,
+        [c.uid, c.codigo, c.nome, c.origem, c.meio, c.campanha, c.conteudo, c.termo, c.link]);
+      return { status: 200, corpo: { campanha: comCurto(r.rows[0], site) } };
+    } catch (e) {
+      const onde = e.constraint || e.detail || '';
+      if (e.code === '23505' && /codigo/.test(onde) && pedido) return { status: 409, corpo: { erro: `O código "${pedido}" já está em uso. Escolha outro.` } };
+      if (e.code !== '23505' || !/uid|codigo/.test(onde)) throw e;
+    }
   }
   throw new Error('não foi possível gerar um utm_id único');
 }
@@ -69,7 +80,7 @@ async function idsEmFoco(uid, origem) {
 }
 
 // Lista com resultados do período: visitas e cliques do hub (banco) + pedidos e receita (GA4, só pelo utm_id).
-async function listar(dias) {
+async function listar(dias, site) {
   const DE = inicio(dias - 1);
   const [lista, hub] = await Promise.all([
     todas(),
@@ -87,11 +98,11 @@ async function listar(dias) {
     if (!vendas?.vendas.porCampanha) return { estado: 'indisponivel' };
     return rga.medida(vendas.vendas.porCampanha[c.uid]?.[campo] ?? 0, vendas.cobertura, 'purchase');
   };
-  return lista.map(c => ({ ...c, ...(porUid[c.uid] || { visitas: 0, cliques: 0, cliques_pedido: 0, antigos: 0 }), pedidos: medida(c, 'compras'), receita: medida(c, 'receita') }));
+  return lista.map(c => ({ ...comCurto(c, site), ...(porUid[c.uid] || { visitas: 0, cliques: 0, cliques_pedido: 0, antigos: 0 }), pedidos: medida(c, 'compras'), receita: medida(c, 'receita') }));
 }
 
 // Uma campanha: cliques por botão e unidade, vendas (só pelo utm_id) e as etapas disponíveis da jornada.
-async function detalhe(uid, dias) {
+async function detalhe(uid, dias, site) {
   const c = (await query(`select ${COLUNAS} from campanhas where uid = $1`, [uid])).rows[0];
   if (!c) return null;
   const DE = inicio(dias - 1);
@@ -133,7 +144,7 @@ async function detalhe(uid, dias) {
   const porUnidade = {};
   for (const b of botoes) if (b.unidade) porUnidade[b.unidade] = (porUnidade[b.unidade] || 0) + b.cliques;
   return {
-    campanha: c, dias, hub: totais.rows[0], botoes,
+    campanha: comCurto(c, site), dias, hub: totais.rows[0], botoes,
     unidades: Object.entries(porUnidade).map(([loja, cliques]) => ({ loja, nome: nomeLoja[loja] || loja, cliques })).filter(u => u.cliques),
     vendas: { pedidos: med(v?.total, 'compras'), receita: med(v?.total, 'receita'), compradores: med(v?.total, 'compradores') },
     jornada,
@@ -147,4 +158,4 @@ async function operar(b, site) {
   return { status: 400, corpo: { erro: 'Ação desconhecida.' } };
 }
 
-module.exports = { operar, listar, todas, detalhe, idsEmFoco, linkDaCampanha, UID };
+module.exports = { CODIGO, operar, listar, todas, detalhe, idsEmFoco, linkDaCampanha, UID };
